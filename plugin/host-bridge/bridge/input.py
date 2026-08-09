@@ -8,12 +8,19 @@ AppleScriptInputBackend (macOS only)
 XdotoolInputBackend (Linux X11 only)
     Uses xdotool to inject keystrokes into the focused or targeted window.
 
+YdotoolInputBackend (Linux Wayland only)
+    Uses ydotool (uinput-based) to inject keystrokes. No window targeting —
+    events go to whatever the compositor currently has focused.
+
 NullInputBackend
     No-op fallback used when no platform backend is available.
 
 Factory
 -------
 Call ``create_backend()`` to obtain the configured backend instance.
+Backend selection is controlled by ``config.INPUT_BACKEND``
+(``FLIPPER_INPUT_BACKEND`` env var): "auto" (default), "xdotool", "ydotool",
+or "none".
 """
 
 import asyncio
@@ -21,6 +28,8 @@ import logging
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+
+from . import config
 
 log = logging.getLogger(__name__)
 
@@ -320,7 +329,9 @@ class NullInputBackend(InputBackend):
             log.warning(
                 "No input backend available on this platform — "
                 "Flipper button-to-keystroke forwarding is disabled. "
-                "On Linux install xdotool (apt install xdotool) to enable it."
+                "On Linux install xdotool (X11: apt install xdotool) or "
+                "ydotool (Wayland: apt install ydotool, then enable ydotoold) "
+                "to enable it."
             )
 
     async def send_ctrl_c(self) -> None:
@@ -458,14 +469,180 @@ class XdotoolInputBackend(InputBackend):
 
 
 # ---------------------------------------------------------------------------
+# Linux ydotool backend (Wayland)
+# ---------------------------------------------------------------------------
+
+# Mapping from abstract key names to Linux input-event-codes
+# (linux/input-event-codes.h). Same key set as _XDOTOOL_KEY_NAMES.
+_YDOTOOL_KEY_CODES: dict[str, int] = {
+    "return":    28,   # KEY_ENTER
+    "escape":    1,    # KEY_ESC
+    "down":      108,  # KEY_DOWN
+    "up":        103,  # KEY_UP
+    "left":      105,  # KEY_LEFT
+    "right":     106,  # KEY_RIGHT
+    "space":     57,   # KEY_SPACE
+    "tab":       15,   # KEY_TAB
+    "backspace": 14,   # KEY_BACKSPACE
+    "page_up":   104,  # KEY_PAGEUP
+    "page_down": 109,  # KEY_PAGEDOWN
+}
+
+# macOS keycode -> Linux input-event-code (only codes actually used by the bridge)
+_MACOS_KEYCODE_TO_LINUX: dict[int, int] = {
+    8:   46,   # C   (Ctrl+C)
+    14:  18,   # E   (Ctrl+E)
+    31:  24,   # O   (Ctrl+O)
+    36:  28,   # Return
+    48:  15,   # Tab (Shift+Tab)
+    49:  57,   # space
+    51:  14,   # BackSpace
+    53:  1,    # Escape
+    116: 104,  # PageUp
+    121: 109,  # PageDown
+    125: 108,  # Down
+}
+
+# macOS modifier phrase -> Linux modifier input-event-code
+_MACOS_MOD_TO_LINUX: dict[str, int] = {
+    "control down": 29,   # KEY_LEFTCTRL
+    "shift down":   42,   # KEY_LEFTSHIFT
+    "option down":  56,   # KEY_LEFTALT
+    "command down": 125,  # KEY_LEFTMETA
+}
+
+
+async def _run_ydotool(args: list[str], context: str) -> None:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ydotool", *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            message = stderr.decode().strip() or stdout.decode().strip() or f"rc={proc.returncode}"
+            log.warning("%s failed: %s (is ydotoold running?)", context, message)
+    except Exception as e:
+        log.error("%s error: %s", context, e)
+
+
+class YdotoolInputBackend(InputBackend):
+    """Linux Wayland input backend using ydotool (uinput-based).
+
+    ydotool injects events at the kernel (uinput) level, so unlike xdotool
+    there is no concept of a target window — keystrokes always go to
+    whatever the compositor currently has focused. ``set_target`` is kept
+    for interface parity but is otherwise a no-op.
+    """
+
+    _warned_no_targeting = False
+
+    def __init__(self) -> None:
+        self._target: InputTarget | None = None
+
+    def set_target(self, target: dict[str, str] | None) -> None:
+        self._target = InputTarget.from_payload(target)
+        if self._target and not YdotoolInputBackend._warned_no_targeting:
+            YdotoolInputBackend._warned_no_targeting = True
+            log.info(
+                "ydotool has no window-targeting support on Wayland — "
+                "keystrokes go to whatever has compositor focus."
+            )
+
+    async def send_ctrl_c(self) -> None:
+        ctrl = _MACOS_MOD_TO_LINUX["control down"]
+        c = _MACOS_KEYCODE_TO_LINUX[8]
+        await _run_ydotool(
+            ["key", f"{ctrl}:1", f"{c}:1", f"{c}:0", f"{ctrl}:0"], "Ctrl+C"
+        )
+
+    async def send_keystroke(self, key: str) -> None:
+        code = _YDOTOOL_KEY_CODES.get(key)
+        if code is None:
+            log.warning("ydotool: no keycode mapping for %r", key)
+            return
+        await _run_ydotool(["key", f"{code}:1", f"{code}:0"], f"keystroke({key})")
+
+    async def send_text(self, text: str) -> None:
+        await _run_ydotool(["type", "--", text], "type")
+        enter = _YDOTOOL_KEY_CODES["return"]
+        await _run_ydotool(["key", f"{enter}:1", f"{enter}:0"], "Return")
+
+    async def send_chars(self, text: str, *, focus: bool = True) -> None:
+        await _run_ydotool(["type", "--", text], "type_chars")
+
+    async def send_modified_keystroke(self, key_code: int, modifiers: str) -> None:
+        code = _MACOS_KEYCODE_TO_LINUX.get(key_code, key_code)
+        mod = _MACOS_MOD_TO_LINUX.get(modifiers.lower().strip())
+        args = [f"{mod}:1"] if mod else []
+        args += [f"{code}:1", f"{code}:0"]
+        if mod:
+            args.append(f"{mod}:0")
+        await _run_ydotool(["key", *args], f"keystroke(code={key_code}, mod={modifiers})")
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
+
+def _is_wayland_session() -> bool:
+    return bool(os.environ.get("WAYLAND_DISPLAY")) or \
+        os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+
 
 def create_backend() -> InputBackend:
     if sys.platform == "darwin":
         return AppleScriptInputBackend()
     if sys.platform == "linux":
         import shutil
+        backend = config.INPUT_BACKEND.strip().lower()
+
+        if backend == "none":
+            log.info("Input backend disabled via FLIPPER_INPUT_BACKEND=none")
+            return NullInputBackend()
+
+        if backend == "ydotool":
+            if shutil.which("ydotool"):
+                log.info("Input backend: ydotool (forced via FLIPPER_INPUT_BACKEND)")
+                return YdotoolInputBackend()
+            log.warning(
+                "FLIPPER_INPUT_BACKEND=ydotool but ydotool not found — "
+                "keystroke forwarding disabled. Install it (sudo apt install "
+                "ydotool) and make sure ydotoold is running."
+            )
+            return NullInputBackend()
+
+        if backend == "xdotool":
+            if shutil.which("xdotool"):
+                log.info("Input backend: xdotool (forced via FLIPPER_INPUT_BACKEND)")
+                return XdotoolInputBackend()
+            log.warning(
+                "FLIPPER_INPUT_BACKEND=xdotool but xdotool not found — "
+                "keystroke forwarding disabled. Install it with: "
+                "sudo apt install xdotool"
+            )
+            return NullInputBackend()
+
+        # "auto" (default): pick xdotool vs ydotool based on session type.
+        if _is_wayland_session():
+            if shutil.which("ydotool"):
+                log.info("Input backend: ydotool (Linux Wayland)")
+                return YdotoolInputBackend()
+            if shutil.which("xdotool"):
+                log.warning(
+                    "Wayland session detected but ydotool not found — "
+                    "falling back to xdotool (only works for XWayland windows). "
+                    "Install ydotool for full Wayland support: sudo apt install ydotool"
+                )
+                return XdotoolInputBackend()
+            log.warning(
+                "Wayland session detected but neither ydotool nor xdotool "
+                "found — keystroke forwarding disabled. "
+                "Install ydotool: sudo apt install ydotool (then enable ydotoold)"
+            )
+            return NullInputBackend()
+
         if shutil.which("xdotool"):
             log.info("Input backend: xdotool (Linux X11)")
             return XdotoolInputBackend()

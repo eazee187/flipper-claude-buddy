@@ -42,6 +42,11 @@ DICTATION_CHECK_CMD = os.environ.get("FLIPPER_DICTATION_CHECK_CMD", "")
 # "auto" tries USB first, then BLE — matching Flipper app behaviour.
 TRANSPORT = os.environ.get("FLIPPER_TRANSPORT", "auto")
 
+# Input backend selection: "auto" (default — picks xdotool or ydotool based
+# on the session's WAYLAND_DISPLAY/XDG_SESSION_TYPE), "xdotool", "ydotool",
+# or "none" (disable keystroke forwarding entirely). Linux only.
+INPUT_BACKEND = os.environ.get("FLIPPER_INPUT_BACKEND", "auto")
+
 # Path to cache file for auto-detected BT name (set by plugin session-start hook)
 _plugin_data = os.environ.get("FLIPPER_PLUGIN_DATA", "")
 BT_NAME_CACHE = os.path.join(_plugin_data, "bt_name") if _plugin_data else ""

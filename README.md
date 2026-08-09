@@ -85,11 +85,17 @@ Connects over USB (plug-and-play) or Bluetooth LE — whichever is available. US
 sudo usermod -aG dialout $USER  # log out and back in to apply
 ```
 
-**Linux — Keystroke forwarding:** Flipper button presses are forwarded to your terminal via `xdotool` (X11 only). Install it if needed:
+**Linux — Keystroke forwarding:** Flipper button presses are forwarded to your terminal via `xdotool` (X11) or `ydotool` (Wayland). The bridge auto-detects which one to use from `WAYLAND_DISPLAY`/`XDG_SESSION_TYPE`. Install whichever matches your session:
 ```bash
+# X11
 sudo apt install xdotool
+
+# Wayland
+sudo apt install ydotool
+sudo systemctl enable --now ydotoold   # background service ydotool talks to
+sudo usermod -aG input $USER           # needed for /dev/uinput access; log out and back in
 ```
-Wayland is not yet supported for keystroke forwarding.
+Note: `ydotool` has no concept of a target window — unlike `xdotool`, keystrokes always go to whatever the compositor currently has focused, so multi-terminal targeting doesn't apply under Wayland. To force a specific backend (or disable forwarding entirely) set `FLIPPER_INPUT_BACKEND=xdotool`, `ydotool`, or `none`.
 
 **Linux — BLE:** BLE transport works via BlueZ. Make sure BlueZ is installed and running:
 ```bash
