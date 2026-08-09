@@ -63,6 +63,7 @@ static MsgType parse_type(const char* type_str) {
     if(strcmp(type_str, "menu") == 0) return MsgTypeMenu;
     if(strcmp(type_str, "state") == 0) return MsgTypeState;
     if(strcmp(type_str, "perm") == 0) return MsgTypePerm;
+    if(strcmp(type_str, "usage") == 0) return MsgTypeUsage;
     return MsgTypeUnknown;
 }
 
@@ -103,6 +104,16 @@ bool protocol_parse(const char* json_line, ProtocolMessage* msg) {
     case MsgTypePerm:
         json_get_string(d_start, "tool", msg->text, sizeof(msg->text));
         json_get_string(d_start, "detail", msg->text2, sizeof(msg->text2));
+        break;
+    case MsgTypeUsage:
+        {
+            int v = 0;
+            if(json_get_int(d_start, "in", &v)) msg->usage_input_tokens = (uint32_t)v;
+            if(json_get_int(d_start, "out", &v)) msg->usage_output_tokens = (uint32_t)v;
+            if(json_get_int(d_start, "cw", &v)) msg->usage_cache_write_tokens = (uint32_t)v;
+            if(json_get_int(d_start, "cr", &v)) msg->usage_cache_read_tokens = (uint32_t)v;
+            if(json_get_int(d_start, "cost", &v)) msg->usage_cost_cents = (uint32_t)v;
+        }
         break;
     case MsgTypePing:
         {

@@ -191,6 +191,16 @@ class Daemon:
             await self.serial.send(protocol.status_msg(text, sub))
             return {"status": "ok"}
 
+        elif action == "usage":
+            await self.serial.send(protocol.usage_msg(
+                request.get("input_tokens", 0),
+                request.get("output_tokens", 0),
+                request.get("cache_write_tokens", 0),
+                request.get("cache_read_tokens", 0),
+                request.get("cost_cents", 0),
+            ))
+            return {"status": "ok"}
+
         elif action == "claude_connect":
             # Update project dir if provided (may differ from bridge startup)
             project_dir = request.get("project_dir", "")

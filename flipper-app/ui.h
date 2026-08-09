@@ -93,10 +93,11 @@ typedef struct {
 } PermModel;
 
 typedef enum {
-    InfoPageMenu,   // top-level: Help / About / Transcript
+    InfoPageMenu,   // top-level: Help / About / Transcript / Usage
     InfoPageHelp,
     InfoPageAbout,
     InfoPageTranscript,
+    InfoPageUsage,
 } InfoPage;
 
 typedef struct {

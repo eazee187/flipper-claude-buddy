@@ -35,6 +35,7 @@
 #include "notifications.h"
 #include "ui.h"
 #include "app_settings.h"
+#include "usage_stats.h"
 
 #define TAG "ClaudeBuddy"
 
@@ -444,6 +445,13 @@ static void process_message(App* app, ProtocolMessage* msg) {
         if(msg->menu_data[0]) {
             ui_update_menu(app->ui, msg->menu_data);
         }
+        break;
+
+    case MsgTypeUsage:
+        usage_stats_set(
+            msg->usage_input_tokens, msg->usage_output_tokens,
+            msg->usage_cache_write_tokens, msg->usage_cache_read_tokens,
+            msg->usage_cost_cents);
         break;
 
     case MsgTypePerm: {

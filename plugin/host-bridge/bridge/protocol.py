@@ -48,6 +48,20 @@ def status_msg(line1: str, line2: str = "") -> bytes:
     return encode("status", d)
 
 
+def usage_msg(
+    input_tokens: int, output_tokens: int, cache_write_tokens: int,
+    cache_read_tokens: int, cost_cents: int,
+) -> bytes:
+    d = {
+        "in": int(input_tokens),
+        "out": int(output_tokens),
+        "cw": int(cache_write_tokens),
+        "cr": int(cache_read_tokens),
+        "cost": int(cost_cents),
+    }
+    return encode("usage", d)
+
+
 def ping_msg(rssi: int | None = None) -> bytes:
     d: dict[str, int] = {}
     if rssi is not None:

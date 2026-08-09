@@ -22,6 +22,7 @@ App(
         "nus_transcript.c",# Desktop-mode transcript ring buffer
         "nus_charpack.c",  # Folder-push receiver for character packs
         "app_settings.c",  # Persisted per-app settings (BleMode)
+        "usage_stats.c",   # Bridge-mode cumulative session token/cost usage
         "ui.c",
         "notifications.c",
     ],

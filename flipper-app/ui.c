@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "app_settings.h"
 #include "nus_transcript.h"
+#include "usage_stats.h"
 #include <gui/elements.h>
 #include <string.h>
 #include <stdio.h>
@@ -773,7 +774,7 @@ static bool menu_input(InputEvent* event, void* context) {
 
 // ── Info View ────────────────────────────────────────────────────
 
-#define INFO_MENU_COUNT 5
+#define INFO_MENU_COUNT 6
 /* Order: BLE mode toggle on top, Help just before About.  The BLE row
  * is rendered dynamically — label shows the *current* mode so user
  * sees what's active and toggles to the other. */
@@ -782,8 +783,15 @@ static bool menu_input(InputEvent* event, void* context) {
 #define INFO_IDX_SHIFTTAB 2
 #define INFO_IDX_HELP     3
 #define INFO_IDX_ABOUT    4
+#define INFO_IDX_USAGE    5
 static const char* info_menu_items[INFO_MENU_COUNT] = {
-    NULL /* BLE mode */, "Transcript", "Shift+Tab", "Help", "About"};
+    NULL /* BLE mode */, "Transcript", "Shift+Tab", "Help", "About", "Usage"};
+/* Only MENU_VISIBLE rows fit in the 39px list area (item_h=8 * 5 = 40px
+ * already fills it) — the window scrolls, deriving its top row live from
+ * the selected index each frame (see InfoPageMenu draw block) rather than
+ * a stored scroll field, since m->scroll is reused by Help/About/Transcript
+ * without being reset on "Back to Menu". */
+#define MENU_VISIBLE 5
 
 /* Shift+Tab is a Bridge-only action (the Flipper asks the host to send a
  * Shift+Tab keystroke into the active shell); in Desktop mode there is no
@@ -930,17 +938,25 @@ static void info_draw(Canvas* canvas, void* model) {
 
     if(m->page == InfoPageMenu) {
         draw_header(canvas, "MENU", false);
-        /* Up to 5 items in 39px of list space (y=14..53, footer at 53).
-         * Hidden items collapse — we render with a visible-slot counter
-         * for y-position so there's no blank row in the middle. */
+        /* Hidden items (e.g. Shift+Tab in Desktop mode) collapse out of the
+         * visible list entirely — build the visible-index list first, then
+         * scroll-window it so more items than fit (MENU_VISIBLE) can be
+         * reached. */
         if(!info_menu_item_visible(m->index)) m->index = info_menu_step(m->index, 1);
-        const int item_h = 8;
-        const int list_y = 14;
-        int vpos = 0;
+        int visible_indices[INFO_MENU_COUNT];
+        int visible_count = 0;
+        int sel_vpos = 0;
         for(int i = 0; i < INFO_MENU_COUNT; i++) {
             if(!info_menu_item_visible(i)) continue;
-            int by = list_y + vpos * item_h;
-            vpos++;
+            if(i == m->index) sel_vpos = visible_count;
+            visible_indices[visible_count++] = i;
+        }
+        int top = (sel_vpos >= MENU_VISIBLE) ? (sel_vpos - MENU_VISIBLE + 1) : 0;
+        const int item_h = 8;
+        const int list_y = 14;
+        for(int slot = 0; slot < MENU_VISIBLE && (top + slot) < visible_count; slot++) {
+            int i = visible_indices[top + slot];
+            int by = list_y + slot * item_h;
             const char* label = info_menu_items[i];
             if(i == INFO_IDX_BLE) {
                 label = (app_settings_get_ble_mode() == BleModeDesktop)
@@ -956,6 +972,9 @@ static void info_draw(Canvas* canvas, void* model) {
             } else {
                 canvas_draw_str(canvas, 5, by + 6, label);
             }
+        }
+        if(visible_count > MENU_VISIBLE) {
+            draw_scrollbar(canvas, top, visible_count - MENU_VISIBLE + 1, list_y, FTR_Y - 1);
         }
         draw_footer_sep(canvas);
         hint_ok(canvas, "Open");
@@ -1117,6 +1136,27 @@ static void info_draw(Canvas* canvas, void* model) {
         }
         draw_footer_sep(canvas);
         hint_back(canvas, "Back");
+    } else if(m->page == InfoPageUsage) {
+        draw_header(canvas, "USAGE", false);
+        canvas_set_font(canvas, FontSecondary);
+        UsageStats u;
+        usage_stats_get(&u);
+        if(!u.has_data) {
+            canvas_draw_str_aligned(canvas, 64, 33, AlignCenter, AlignCenter, "(no data yet)");
+        } else {
+            char line[24];
+            snprintf(line, sizeof(line), "In: %lu", (unsigned long)u.input_tokens);
+            canvas_draw_str(canvas, 2, 19, line);
+            snprintf(line, sizeof(line), "Out: %lu", (unsigned long)u.output_tokens);
+            canvas_draw_str(canvas, 2, 29, line);
+            snprintf(line, sizeof(line), "Cache: %lu", (unsigned long)(u.cache_write_tokens + u.cache_read_tokens));
+            canvas_draw_str(canvas, 2, 39, line);
+            snprintf(line, sizeof(line), "Est: $%lu.%02lu",
+                     (unsigned long)(u.cost_cents / 100), (unsigned long)(u.cost_cents % 100));
+            canvas_draw_str(canvas, 2, 49, line);
+        }
+        draw_footer_sep(canvas);
+        hint_back(canvas, "Back");
     }
 }
 
@@ -1158,7 +1198,7 @@ static bool info_input(InputEvent* event, void* context) {
              * Shift+Tab (2) are handled above; their entries here are
              * placeholders. */
             const InfoPage pages[INFO_MENU_COUNT] = {
-                0, InfoPageTranscript, 0, InfoPageHelp, InfoPageAbout};
+                0, InfoPageTranscript, 0, InfoPageHelp, InfoPageAbout, InfoPageUsage};
             m->page = pages[m->index];
             m->scroll = 0;
             m->h_scroll = 0;
@@ -1269,6 +1309,12 @@ static bool info_input(InputEvent* event, void* context) {
             view_commit_model(ui->info_view, true);
             return true;
         }
+        if(event->key == InputKeyBack) {
+            m->page = InfoPageMenu;
+            view_commit_model(ui->info_view, true);
+            return true;
+        }
+    } else if(m->page == InfoPageUsage) {
         if(event->key == InputKeyBack) {
             m->page = InfoPageMenu;
             view_commit_model(ui->info_view, true);

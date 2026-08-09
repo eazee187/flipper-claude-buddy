@@ -14,6 +14,7 @@ typedef enum {
     MsgTypeMenu,
     MsgTypeState,
     MsgTypePerm,
+    MsgTypeUsage,
     // Flipper -> Host
     MsgTypeCmd,
     MsgTypeEnter,
@@ -58,6 +59,13 @@ typedef struct {
     int hb_waiting;
     uint32_t hb_tokens;        /* cumulative since desktop start */
     uint32_t hb_tokens_today;  /* resets at local midnight */
+    /* Bridge-mode cumulative session usage (for MsgTypeUsage). Cost is
+     * estimated USD cents, computed host-side. */
+    uint32_t usage_input_tokens;
+    uint32_t usage_output_tokens;
+    uint32_t usage_cache_write_tokens;
+    uint32_t usage_cache_read_tokens;
+    uint32_t usage_cost_cents;
     /* Per-kind payloads deferred to the GUI thread.  Keeping storage /
      * hardware side-effects off the BLE event callback thread avoids
      * deadlocks and long-blocking operations on that critical path. */

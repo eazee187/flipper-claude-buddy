@@ -21,6 +21,10 @@ fi
 # Read hook payload from stdin
 PAYLOAD=$(cat)
 
+# Update the on-device Usage page with cumulative session token/cost totals
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-.}"
+echo "$PAYLOAD" | python3 "$PLUGIN_ROOT/scripts/usage-tracker.py" 2>/dev/null &
+
 # Check if interrupted
 INTERRUPTED=$(echo "$PAYLOAD" | python3 -c "
 import json, sys
