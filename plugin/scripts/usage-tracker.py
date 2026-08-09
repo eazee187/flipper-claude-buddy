@@ -1,151 +1,63 @@
 #!/usr/bin/env python3
-"""Stop hook: accumulates session token usage from the transcript and pushes
-a cumulative total (+ a rough cost estimate) to the Flipper's Usage screen.
+"""Stop hook: forwards this session's token usage / cost / context-remaining %
+to the Flipper's Usage screen and header, sourced from the separately
+installed "ecc" plugin's own already-computed data.
 
-Reads only the transcript lines appended since the last run (tracked via a
-byte offset in a per-session state file), so cost stays O(new lines) per
-Stop event instead of re-scanning the whole (growing) transcript.
+No calculation happens here — if ecc isn't installed (or hasn't produced
+data for this session yet), this hook sends nothing and the Flipper simply
+shows no data, same as before its first "usage" message ever arrives.
+
+Data sources (both written by ecc, not by this project):
+  ~/.claude/metrics/costs.jsonl        cumulative cost/token totals, one row
+                                        per Stop event, appended by ecc's own
+                                        cost-tracker.js. We take the last row
+                                        matching this session_id.
+  /tmp/ecc-metrics-<session_id>.json   context_remaining_pct specifically —
+                                        only populated once ecc's statusLine
+                                        command has run at least once.
 """
 
 import json
 import os
 import socket
 import sys
+import tempfile
 
 SOCKET_PATH = "/tmp/claude-flipper-bridge.sock"
-
-# Rough per-1M-token USD rates (input, output). Cache-write is priced at
-# 1.25x the input rate, cache-read at 0.1x — mirrors Anthropic's published
-# cache pricing multipliers. NOTE: this table is a point-in-time estimate
-# and will go stale as pricing changes; unrecognized models fall back to
-# Sonnet rates.
-RATE_TABLE = {
-    "opus": (15.0, 75.0),
-    "sonnet": (3.0, 15.0),
-    "haiku": (0.8, 4.0),
-}
-DEFAULT_RATE = RATE_TABLE["sonnet"]
-
-# Context-window-remaining %, computed the same way as the separately
-# installed "ecc" plugin's transcript-context.js: based on the *latest*
-# turn's prompt size (input + cache_read + cache_creation, NOT output —
-# that's generation size, not context size), not a cumulative total.
-STANDARD_CONTEXT_WINDOW_TOKENS = 200_000
-LARGE_CONTEXT_WINDOW_TOKENS = 1_000_000
+COSTS_PATH = os.path.expanduser("~/.claude/metrics/costs.jsonl")
 
 
-def rates_for_model(model: str) -> tuple[float, float]:
-    model = (model or "").lower()
-    for key, rate in RATE_TABLE.items():
-        if key in model:
-            return rate
-    return DEFAULT_RATE
-
-
-def resolve_context_window(tokens: int, model: str) -> int:
+def read_latest_costs_row(session_id: str) -> dict | None:
     try:
-        env_value = int(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW", ""))
-        if env_value > 0:
-            return env_value
-    except ValueError:
-        pass
-    if "[1m]" in (model or "").lower():
-        return LARGE_CONTEXT_WINDOW_TOKENS
-    if tokens > STANDARD_CONTEXT_WINDOW_TOKENS:
-        return LARGE_CONTEXT_WINDOW_TOKENS
-    return STANDARD_CONTEXT_WINDOW_TOKENS
-
-
-def context_remaining_pct(last_usage: dict | None) -> int | None:
-    if not last_usage:
-        return None
-    tokens = last_usage["context_tokens"]
-    window = resolve_context_window(tokens, last_usage["model"])
-    return max(0, min(100, round((1 - tokens / window) * 100)))
-
-
-def load_state(state_path: str) -> dict:
-    try:
-        with open(state_path) as f:
-            return json.load(f)
-    except Exception:
-        return {"offset": 0, "totals": {}}
-
-
-def save_state(state_path: str, state: dict) -> None:
-    try:
-        with open(state_path, "w") as f:
-            json.dump(state, f)
-    except Exception:
-        pass
-
-
-def accumulate(transcript_path: str, state: dict) -> tuple[dict, dict | None]:
-    totals = state.get("totals", {})
-    offset = state.get("offset", 0)
-    last_usage = None
-
-    try:
-        size = os.path.getsize(transcript_path)
+        with open(COSTS_PATH) as f:
+            lines = f.readlines()
     except OSError:
-        return state, None
-    if offset > size:
-        # Transcript was rewritten/truncated — start over.
-        offset = 0
-        totals = {}
-
-    with open(transcript_path, "r") as f:
-        f.seek(offset)
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("type") != "assistant":
-                continue
-            message = entry.get("message") or {}
-            usage = message.get("usage")
-            if not usage:
-                continue
-            model = message.get("model", "unknown")
-            t = totals.setdefault(
-                model, {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}
-            )
-            input_t = usage.get("input_tokens", 0) or 0
-            output_t = usage.get("output_tokens", 0) or 0
-            cache_write_t = usage.get("cache_creation_input_tokens", 0) or 0
-            cache_read_t = usage.get("cache_read_input_tokens", 0) or 0
-            t["input"] += input_t
-            t["output"] += output_t
-            t["cache_write"] += cache_write_t
-            t["cache_read"] += cache_read_t
-            # Overwritten on every matching line, so this ends up holding
-            # the latest turn's snapshot once the loop finishes.
-            last_usage = {"model": model, "context_tokens": input_t + cache_write_t + cache_read_t}
-        offset = f.tell()
-
-    return {"offset": offset, "totals": totals}, last_usage
+        return None
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("session_id") == session_id:
+            return row
+    return None
 
 
-def grand_totals(state: dict) -> tuple[int, int, int, int, int]:
-    input_tokens = output_tokens = cache_write = cache_read = 0
-    cost_usd = 0.0
-    for model, t in state.get("totals", {}).items():
-        input_tokens += t["input"]
-        output_tokens += t["output"]
-        cache_write += t["cache_write"]
-        cache_read += t["cache_read"]
-        rate_in, rate_out = rates_for_model(model)
-        cost_usd += (
-            t["input"] * rate_in
-            + t["output"] * rate_out
-            + t["cache_write"] * rate_in * 1.25
-            + t["cache_read"] * rate_in * 0.1
-        ) / 1_000_000
-    return input_tokens, output_tokens, cache_write, cache_read, round(cost_usd * 100)
+def read_context_pct(session_id: str) -> int | None:
+    # ecc writes this via Node's os.tmpdir(), which (like Python's
+    # tempfile.gettempdir()) honors $TMPDIR when set — not always plain
+    # /tmp (e.g. systemd-managed per-user tmp dirs like /tmp/user/1000).
+    bridge_path = os.path.join(tempfile.gettempdir(), f"ecc-metrics-{session_id}.json")
+    try:
+        with open(bridge_path) as f:
+            bridge = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    pct = bridge.get("context_remaining_pct")
+    return int(pct) if isinstance(pct, (int, float)) else None
 
 
 def send_to_flipper(
@@ -180,20 +92,26 @@ def main():
     except (json.JSONDecodeError, EOFError):
         return
 
-    transcript_path = payload.get("transcript_path")
     session_id = payload.get("session_id")
-    if not transcript_path or not session_id:
+    if not session_id:
         return
 
-    state_path = f"/tmp/claude-flipper-usage-{session_id}.json"
-    state = load_state(state_path)
-    state, last_usage = accumulate(transcript_path, state)
-    save_state(state_path, state)
+    row = read_latest_costs_row(session_id)
+    if row is None:
+        # ecc not installed, or no Stop event recorded for this session yet.
+        return
 
-    input_tokens, output_tokens, cache_write, cache_read, cost_cents = grand_totals(state)
-    ctx_pct = context_remaining_pct(last_usage)
+    cost_cents = round(row.get("estimated_cost_usd", 0.0) * 100)
+    ctx_pct = read_context_pct(session_id)
     try:
-        send_to_flipper(input_tokens, output_tokens, cache_write, cache_read, cost_cents, ctx_pct)
+        send_to_flipper(
+            row.get("input_tokens", 0),
+            row.get("output_tokens", 0),
+            row.get("cache_write_tokens", 0),
+            row.get("cache_read_tokens", 0),
+            cost_cents,
+            ctx_pct,
+        )
     except Exception:
         pass
 

@@ -10,6 +10,8 @@ Turn your Flipper Zero into a physical companion for Claude Code. Get tactile fe
 - **On-device Usage page** (Menu → Usage) — cumulative session token counts and an estimated cost, right on the Flipper.
 - **Context-remaining % in the header** — the main screen now shows how much of the model's context window is still free, at a glance.
 
+Both of these are sourced from the [ecc plugin](https://github.com/affaan-m/ECC)'s own cost/context tracking rather than computed by this project — install ecc to get reliable numbers here. Without it, the Usage page and header % stay empty. The context-remaining % additionally requires ecc's `statusLine` to be configured (see ecc's own setup docs); the Usage page's cost/token totals work with ecc installed regardless.
+
 See [CHANGELOG.md](flipper-app/CHANGELOG.md) for the full history.
 
 ## What it does
