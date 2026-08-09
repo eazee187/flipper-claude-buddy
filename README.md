@@ -66,7 +66,7 @@ Download `claude_buddy.fap` from the [latest release](../../releases/latest) and
 > **Requires Python 3.10 or higher.** If you're on an older system Python, upgrade first (e.g. via [pyenv](https://github.com/pyenv/pyenv) or [python.org](https://www.python.org/downloads/)), then reinstall the plugin.
 
 ```bash
-claude plugin marketplace add jxw1102/flipper-claude-buddy
+claude plugin marketplace add eazee187/flipper-claude-buddy
 claude plugin install flipper-claude-buddy@flipper-claude-buddy
 ```
 

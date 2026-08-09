@@ -834,10 +834,10 @@ static int info_menu_step(int from, int delta) {
 
 static const char* about_lines[] = {
     "Claude Buddy",
-    "v0.7",
+    "v0.7.1",
     "Claude Code companion",
-    "by jxw1102",
-    "github.com/jxw1102",
+    "by eazee187",
+    "github.com/eazee187",
     "/flipper-claude-buddy",
 };
 #define ABOUT_LINE_COUNT 6
@@ -871,7 +871,7 @@ static const HelpEntry help_entries_bridge[] = {
     {HelpBtnText,  false, "Install plugin:"},
     {HelpBtnText,  false, "```"},
     {HelpBtnText,  false, "claude plugin marketplace"},
-    {HelpBtnText,  false, "add jxw1102/flipper-"},
+    {HelpBtnText,  false, "add eazee187/flipper-"},
     {HelpBtnText,  false, "claude-buddy"},
     {HelpBtnText,  false, ""},
     {HelpBtnText,  false, "claude plugin install"},

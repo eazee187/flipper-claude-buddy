@@ -1,3 +1,7 @@
+## v0.7.1
+
+- Updated author/repo attribution throughout (plugin metadata, marketplace listing, on-device About/Help pages) to the current maintainer.
+
 ## v0.7
 
 - Linux Wayland keystroke forwarding via `ydotool`, auto-detected alongside the existing `xdotool` (X11) backend.

@@ -22,7 +22,7 @@ Both modes give you the same LED / sound / vibration feedback for working, succe
 
    (bash)
 
-   claude plugin marketplace add jxw1102/flipper-claude-buddy
+   claude plugin marketplace add eazee187/flipper-claude-buddy
 
    claude plugin install flipper-claude-buddy@flipper-claude-buddy
 
