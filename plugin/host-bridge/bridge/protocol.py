@@ -50,7 +50,7 @@ def status_msg(line1: str, line2: str = "") -> bytes:
 
 def usage_msg(
     input_tokens: int, output_tokens: int, cache_write_tokens: int,
-    cache_read_tokens: int, cost_cents: int,
+    cache_read_tokens: int, cost_cents: int, context_pct: int | None = None,
 ) -> bytes:
     d = {
         "in": int(input_tokens),
@@ -59,6 +59,8 @@ def usage_msg(
         "cr": int(cache_read_tokens),
         "cost": int(cost_cents),
     }
+    if context_pct is not None:
+        d["pct"] = int(context_pct)
     return encode("usage", d)
 
 

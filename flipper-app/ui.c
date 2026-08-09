@@ -487,6 +487,21 @@ static void status_draw(Canvas* canvas, void* model) {
         canvas_draw_str(canvas, 1, 8, "M");
     }
 
+    // Context-window-remaining % (Bridge mode only) — pinned to the far
+    // left of the header row (just right of the mute "M" slot, x=1-7, so
+    // the two never overlap when both are shown).
+    if(!desktop && m->has_context_pct) {
+        char pct_buf[8];
+        snprintf(pct_buf, sizeof(pct_buf), "%u%%", (unsigned)m->context_pct);
+        canvas_set_font(canvas, FontKeyboard);
+        canvas_draw_str_aligned(
+            canvas,
+            9, HDR_H / 2 + 1,
+            AlignLeft, AlignCenter,
+            pct_buf);
+        canvas_set_font(canvas, FontSecondary);
+    }
+
     // Transport mode — only when connected
     if(m->connected) {
         if(m->transport_mode) {
@@ -1652,6 +1667,16 @@ void ui_set_rssi(UiState* ui, int rssi) {
     } else {
         m->rssi_bars = rssi_to_bars(rssi);
     }
+    view_commit_model(ui->status_view, true);
+}
+
+void ui_set_context_pct(UiState* ui, int pct) {
+    if(!ui) return;
+    if(pct < 0) pct = 0;
+    if(pct > 100) pct = 100;
+    StatusModel* m = view_get_model(ui->status_view);
+    m->context_pct = (uint8_t)pct;
+    m->has_context_pct = true;
     view_commit_model(ui->status_view, true);
 }
 

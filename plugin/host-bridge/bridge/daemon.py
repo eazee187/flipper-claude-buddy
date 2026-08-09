@@ -198,6 +198,7 @@ class Daemon:
                 request.get("cache_write_tokens", 0),
                 request.get("cache_read_tokens", 0),
                 request.get("cost_cents", 0),
+                request.get("context_pct"),
             ))
             return {"status": "ok"}
 

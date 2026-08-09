@@ -66,6 +66,10 @@ typedef struct {
     uint32_t usage_cache_write_tokens;
     uint32_t usage_cache_read_tokens;
     uint32_t usage_cost_cents;
+    /* Context-window-remaining %, 0-100. -1 means "not present in this
+     * message" (the sender omits it when no new usage was seen that
+     * batch) — distinct from a legitimate 0%. */
+    int32_t usage_context_pct;
     /* Per-kind payloads deferred to the GUI thread.  Keeping storage /
      * hardware side-effects off the BLE event callback thread avoids
      * deadlocks and long-blocking operations on that critical path. */

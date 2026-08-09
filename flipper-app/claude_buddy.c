@@ -452,6 +452,9 @@ static void process_message(App* app, ProtocolMessage* msg) {
             msg->usage_input_tokens, msg->usage_output_tokens,
             msg->usage_cache_write_tokens, msg->usage_cache_read_tokens,
             msg->usage_cost_cents);
+        if(msg->usage_context_pct >= 0) {
+            ui_set_context_pct(app->ui, msg->usage_context_pct);
+        }
         break;
 
     case MsgTypePerm: {

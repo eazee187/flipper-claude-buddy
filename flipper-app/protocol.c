@@ -108,11 +108,13 @@ bool protocol_parse(const char* json_line, ProtocolMessage* msg) {
     case MsgTypeUsage:
         {
             int v = 0;
+            msg->usage_context_pct = -1;
             if(json_get_int(d_start, "in", &v)) msg->usage_input_tokens = (uint32_t)v;
             if(json_get_int(d_start, "out", &v)) msg->usage_output_tokens = (uint32_t)v;
             if(json_get_int(d_start, "cw", &v)) msg->usage_cache_write_tokens = (uint32_t)v;
             if(json_get_int(d_start, "cr", &v)) msg->usage_cache_read_tokens = (uint32_t)v;
             if(json_get_int(d_start, "cost", &v)) msg->usage_cost_cents = (uint32_t)v;
+            if(json_get_int(d_start, "pct", &v)) msg->usage_context_pct = v;
         }
         break;
     case MsgTypePing:

@@ -70,6 +70,9 @@ typedef struct {
     uint8_t anim_frame;     // animation counter (incremented by timer)
     uint8_t transport_mode; // 0 = USB, 1 = BT (shown in header)
     uint8_t rssi_bars;      // BLE signal bars 0–4 (only used when transport_mode == 1)
+    uint8_t context_pct;    // context-window-remaining %, 0-100 (Bridge only)
+    bool has_context_pct;   // false until the first "usage" message with a
+                            // "pct" field arrives this app run
 } StatusModel;
 
 #define MAX_MENU_ITEMS 256
@@ -137,5 +140,6 @@ void ui_show_info(UiState* ui);
 void ui_back_to_status(UiState* ui);
 void ui_set_muted(UiState* ui, bool muted);
 void ui_set_rssi(UiState* ui, int rssi);
+void ui_set_context_pct(UiState* ui, int pct);
 void ui_run(UiState* ui);
 void ui_stop(UiState* ui);
