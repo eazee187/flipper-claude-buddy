@@ -25,6 +25,7 @@ or "none".
 
 import asyncio
 import logging
+import os
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -472,44 +473,10 @@ class XdotoolInputBackend(InputBackend):
 # Linux ydotool backend (Wayland)
 # ---------------------------------------------------------------------------
 
-# Mapping from abstract key names to Linux input-event-codes
-# (linux/input-event-codes.h). Same key set as _XDOTOOL_KEY_NAMES.
-_YDOTOOL_KEY_CODES: dict[str, int] = {
-    "return":    28,   # KEY_ENTER
-    "escape":    1,    # KEY_ESC
-    "down":      108,  # KEY_DOWN
-    "up":        103,  # KEY_UP
-    "left":      105,  # KEY_LEFT
-    "right":     106,  # KEY_RIGHT
-    "space":     57,   # KEY_SPACE
-    "tab":       15,   # KEY_TAB
-    "backspace": 14,   # KEY_BACKSPACE
-    "page_up":   104,  # KEY_PAGEUP
-    "page_down": 109,  # KEY_PAGEDOWN
-}
-
-# macOS keycode -> Linux input-event-code (only codes actually used by the bridge)
-_MACOS_KEYCODE_TO_LINUX: dict[int, int] = {
-    8:   46,   # C   (Ctrl+C)
-    14:  18,   # E   (Ctrl+E)
-    31:  24,   # O   (Ctrl+O)
-    36:  28,   # Return
-    48:  15,   # Tab (Shift+Tab)
-    49:  57,   # space
-    51:  14,   # BackSpace
-    53:  1,    # Escape
-    116: 104,  # PageUp
-    121: 109,  # PageDown
-    125: 108,  # Down
-}
-
-# macOS modifier phrase -> Linux modifier input-event-code
-_MACOS_MOD_TO_LINUX: dict[str, int] = {
-    "control down": 29,   # KEY_LEFTCTRL
-    "shift down":   42,   # KEY_LEFTSHIFT
-    "option down":  56,   # KEY_LEFTALT
-    "command down": 125,  # KEY_LEFTMETA
-}
+# ydotool's `key` subcommand takes "mod+key" name sequences (e.g. "shift+Tab",
+# "ctrl+c"), the same key-name syntax as xdotool — not raw evdev keycode:value
+# pairs. Reuses _XDOTOOL_KEY_NAMES / _MACOS_KEYCODE_TO_XSYM / _MACOS_MOD_TO_XDOTOOL
+# defined above for XdotoolInputBackend.
 
 
 async def _run_ydotool(args: list[str], context: str) -> None:
@@ -551,35 +518,24 @@ class YdotoolInputBackend(InputBackend):
             )
 
     async def send_ctrl_c(self) -> None:
-        ctrl = _MACOS_MOD_TO_LINUX["control down"]
-        c = _MACOS_KEYCODE_TO_LINUX[8]
-        await _run_ydotool(
-            ["key", f"{ctrl}:1", f"{c}:1", f"{c}:0", f"{ctrl}:0"], "Ctrl+C"
-        )
+        await _run_ydotool(["key", "ctrl+c"], "Ctrl+C")
 
     async def send_keystroke(self, key: str) -> None:
-        code = _YDOTOOL_KEY_CODES.get(key)
-        if code is None:
-            log.warning("ydotool: no keycode mapping for %r", key)
-            return
-        await _run_ydotool(["key", f"{code}:1", f"{code}:0"], f"keystroke({key})")
+        xsym = _XDOTOOL_KEY_NAMES.get(key, key)
+        await _run_ydotool(["key", xsym], f"keystroke({key})")
 
     async def send_text(self, text: str) -> None:
         await _run_ydotool(["type", "--", text], "type")
-        enter = _YDOTOOL_KEY_CODES["return"]
-        await _run_ydotool(["key", f"{enter}:1", f"{enter}:0"], "Return")
+        await _run_ydotool(["key", "Return"], "Return")
 
     async def send_chars(self, text: str, *, focus: bool = True) -> None:
         await _run_ydotool(["type", "--", text], "type_chars")
 
     async def send_modified_keystroke(self, key_code: int, modifiers: str) -> None:
-        code = _MACOS_KEYCODE_TO_LINUX.get(key_code, key_code)
-        mod = _MACOS_MOD_TO_LINUX.get(modifiers.lower().strip())
-        args = [f"{mod}:1"] if mod else []
-        args += [f"{code}:1", f"{code}:0"]
-        if mod:
-            args.append(f"{mod}:0")
-        await _run_ydotool(["key", *args], f"keystroke(code={key_code}, mod={modifiers})")
+        xsym = _MACOS_KEYCODE_TO_XSYM.get(key_code, str(key_code))
+        xmod = _MACOS_MOD_TO_XDOTOOL.get(modifiers.lower().strip())
+        combo = f"{xmod}+{xsym}" if xmod else xsym
+        await _run_ydotool(["key", combo], f"keystroke(code={key_code}, mod={modifiers})")
 
 
 # ---------------------------------------------------------------------------
