@@ -1,3 +1,7 @@
+## v0.7.2
+
+- Usage page and header context-% now source their numbers from the [ecc plugin](https://github.com/affaan-m/ECC) instead of computing them independently — install ecc for reliable data; without it these stay empty. README documents how to install ecc.
+
 ## v0.7.1
 
 - Updated author/repo attribution throughout (plugin metadata, marketplace listing, on-device About/Help pages) to the current maintainer.
