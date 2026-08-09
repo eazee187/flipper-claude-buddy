@@ -4,6 +4,14 @@ Turn your Flipper Zero into a physical companion for Claude Code. Get tactile fe
 
 > Supports macOS and Linux. Windows is not tested.
 
+## What's new in v0.7
+
+- **Linux Wayland support for keystroke forwarding** — auto-detected `ydotool` backend alongside the existing `xdotool` (X11) one, plus fixes for a startup crash and garbled keystrokes on Wayland.
+- **On-device Usage page** (Menu → Usage) — cumulative session token counts and an estimated cost, right on the Flipper.
+- **Context-remaining % in the header** — the main screen now shows how much of the model's context window is still free, at a glance.
+
+See [CHANGELOG.md](flipper-app/CHANGELOG.md) for the full history.
+
 ## What it does
 
 **You feel what Claude is doing.**

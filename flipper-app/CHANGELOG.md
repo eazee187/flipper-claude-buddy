@@ -1,3 +1,10 @@
+## v0.7
+
+- Linux Wayland keystroke forwarding via `ydotool`, auto-detected alongside the existing `xdotool` (X11) backend.
+- Fixed a crash and garbled keystrokes on the new Wayland backend (missing import, wrong `ydotool` CLI syntax).
+- New on-device **Usage** info page: cumulative session token counts and an estimated cost.
+- New context-window-remaining % shown directly on the main screen header.
+
 ## v0.6
 
 - Fixed connection/disconnection state handling in Bridge mode.
