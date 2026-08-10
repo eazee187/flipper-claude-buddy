@@ -79,7 +79,8 @@ class SerialConnection:
             self._mark_disconnected()
 
     async def send_ping(self) -> None:
-        await self.send(protocol.ping_msg(await self._transport.get_rssi()))
+        quick_action = config.QUICK_ACTION if config.DICTATION_BACKEND == "none" else None
+        await self.send(protocol.ping_msg(await self._transport.get_rssi(), quick_action))
 
     # ── Read loop ──────────────────────────────────────────────────
 

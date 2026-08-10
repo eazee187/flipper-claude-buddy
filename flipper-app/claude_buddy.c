@@ -416,13 +416,16 @@ static void process_message(App* app, ProtocolMessage* msg) {
         } else {
             ui_set_rssi(app->ui, 0);
         }
+        ui_set_quick_action(app->ui, msg->quick_action);
         /* Send hello once per connection (first received ping triggers it).
          * This was previously done in the BLE RX callback, but calling
          * ble_profile_serial_tx from inside that callback deadlocks on
          * Momentum firmware.  Sending from the GUI thread is safe. */
         if(!app->hello_sent) {
             app->hello_sent = true;
-            len = protocol_build_hello(app->tx_buf, sizeof(app->tx_buf));
+            char qa_buf[APP_SETTINGS_QA_MAX];
+            app_settings_get_quick_action(qa_buf, sizeof(qa_buf));
+            len = protocol_build_hello(app->tx_buf, sizeof(app->tx_buf), qa_buf);
             transport_send(app->transport, app->tx_buf, len);
         }
         len = protocol_build_pong(app->tx_buf, sizeof(app->tx_buf));
@@ -872,6 +875,16 @@ static void on_ui_event(UiEventType event, const char* data, void* context) {
         break;
     }
 
+    case UiEventQuickActionSet:
+        /* UI already persisted the new text via app_settings. Tell the
+         * host immediately so it takes effect without a reconnect. Only
+         * meaningful in Bridge mode — Desktop mode has no host bridge and
+         * hides this menu entry entirely (info_menu_item_visible). */
+        app_notify(app, SoundCmd);
+        len = protocol_build_qa_set(app->tx_buf, sizeof(app->tx_buf), data ? data : "");
+        transport_send(app->transport, app->tx_buf, len);
+        break;
+
     case UiEventExitApp:
         ui_stop(app->ui);
         break;
@@ -932,7 +945,9 @@ int32_t claude_buddy_app(void* p) {
 
     /* Hello + connect sound */
     char buf[128];
-    int len = protocol_build_hello(buf, sizeof(buf));
+    char qa_buf[APP_SETTINGS_QA_MAX];
+    app_settings_get_quick_action(qa_buf, sizeof(qa_buf));
+    int len = protocol_build_hello(buf, sizeof(buf), qa_buf);
     transport_send(app->transport, buf, len);
     notify_play(app->notifications, SoundConnect, LedStateOff);
     ui_show_status(app->ui, NULL, true);

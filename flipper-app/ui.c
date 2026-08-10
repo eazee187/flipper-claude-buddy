@@ -470,6 +470,12 @@ static void status_draw(Canvas* canvas, void* model) {
                 canvas_draw_circle(canvas, ox + 2, 5, 2);
             canvas_draw_str(canvas, ox + 8, 8, "REC");
         }
+    } else if(!desktop && m->quick_action[0] != '\0') {
+        // Centered quick-action hint (host's configured Up-button command,
+        // e.g. "/compact") — no mic glyph, this isn't dictation.
+        int tw = (int)canvas_string_width(canvas, m->quick_action);
+        int ox = 64 - tw / 2;
+        canvas_draw_str(canvas, ox, 8, m->quick_action);
     } else if(!desktop) {
         // Centered ▲ Mic hint (Bridge mode only)
         int tw = (int)canvas_string_width(canvas, "Mic");
@@ -789,18 +795,22 @@ static bool menu_input(InputEvent* event, void* context) {
 
 // ── Info View ────────────────────────────────────────────────────
 
-#define INFO_MENU_COUNT 6
+#define INFO_MENU_COUNT 7
 /* Order: BLE mode toggle on top, Help just before About.  The BLE row
  * is rendered dynamically — label shows the *current* mode so user
- * sees what's active and toggles to the other. */
+ * sees what's active and toggles to the other. Quick Action is likewise
+ * dynamic (shows the current command) and Bridge-mode only, like
+ * Shift+Tab. */
 #define INFO_IDX_BLE      0
 #define INFO_IDX_TRANS    1
 #define INFO_IDX_SHIFTTAB 2
-#define INFO_IDX_HELP     3
-#define INFO_IDX_ABOUT    4
-#define INFO_IDX_USAGE    5
+#define INFO_IDX_QUICKACTION 3
+#define INFO_IDX_HELP     4
+#define INFO_IDX_ABOUT    5
+#define INFO_IDX_USAGE    6
 static const char* info_menu_items[INFO_MENU_COUNT] = {
-    NULL /* BLE mode */, "Transcript", "Shift+Tab", "Help", "About", "Usage"};
+    NULL /* BLE mode */, "Transcript", "Shift+Tab", NULL /* Quick Action */,
+    "Help", "About", "Usage"};
 /* Only MENU_VISIBLE rows fit in the 39px list area (item_h=8 * 5 = 40px
  * already fills it) — the window scrolls, deriving its top row live from
  * the selected index each frame (see InfoPageMenu draw block) rather than
@@ -812,7 +822,8 @@ static const char* info_menu_items[INFO_MENU_COUNT] = {
  * Shift+Tab keystroke into the active shell); in Desktop mode there is no
  * keystroke path, so hide the entry entirely. */
 static bool info_menu_item_visible(int idx) {
-    if(idx == INFO_IDX_SHIFTTAB && app_settings_get_ble_mode() == BleModeDesktop)
+    if((idx == INFO_IDX_SHIFTTAB || idx == INFO_IDX_QUICKACTION) &&
+       app_settings_get_ble_mode() == BleModeDesktop)
         return false;
     return true;
 }
@@ -834,7 +845,7 @@ static int info_menu_step(int from, int delta) {
 
 static const char* about_lines[] = {
     "Claude Buddy",
-    "v0.7.3",
+    "v0.7.4",
     "Claude Code companion",
     "by eazee187",
     "github.com/eazee187",
@@ -969,6 +980,7 @@ static void info_draw(Canvas* canvas, void* model) {
         int top = (sel_vpos >= MENU_VISIBLE) ? (sel_vpos - MENU_VISIBLE + 1) : 0;
         const int item_h = 8;
         const int list_y = 14;
+        char qa_label_buf[40];
         for(int slot = 0; slot < MENU_VISIBLE && (top + slot) < visible_count; slot++) {
             int i = visible_indices[top + slot];
             int by = list_y + slot * item_h;
@@ -977,6 +989,14 @@ static void info_draw(Canvas* canvas, void* model) {
                 label = (app_settings_get_ble_mode() == BleModeDesktop)
                             ? "Claude Desktop (BLE)"
                             : "Claude Code (USB/BLE)";
+            } else if(i == INFO_IDX_QUICKACTION) {
+                char qa[APP_SETTINGS_QA_MAX];
+                if(app_settings_get_quick_action(qa, sizeof(qa))) {
+                    snprintf(qa_label_buf, sizeof(qa_label_buf), "Quick Action: %s", qa);
+                } else {
+                    snprintf(qa_label_buf, sizeof(qa_label_buf), "Quick Action: (default)");
+                }
+                label = qa_label_buf;
             }
             canvas_set_font(canvas, FontSecondary);
             if(i == m->index) {
@@ -1209,11 +1229,25 @@ static bool info_input(InputEvent* event, void* context) {
                     ui->event_callback(UiEventShiftTab, NULL, ui->event_context);
                 return true;
             }
-            /* Map remaining entries to their sub-pages.  BLE (0) and
-             * Shift+Tab (2) are handled above; their entries here are
-             * placeholders. */
+            if(m->index == INFO_IDX_QUICKACTION) {
+                /* Prefill with the on-device override if set, else fall
+                 * back to whatever's currently shown in the header (the
+                 * host's live-resolved default) so the field always shows
+                 * what will actually be sent. */
+                if(!app_settings_get_quick_action(ui->qa_edit_buf, sizeof(ui->qa_edit_buf))) {
+                    StatusModel* sm = view_get_model(ui->status_view);
+                    strncpy(ui->qa_edit_buf, sm->quick_action, sizeof(ui->qa_edit_buf) - 1);
+                    ui->qa_edit_buf[sizeof(ui->qa_edit_buf) - 1] = '\0';
+                }
+                ui->current_view = ViewIdTextInput;
+                view_dispatcher_switch_to_view(ui->view_dispatcher, ViewIdTextInput);
+                return true;
+            }
+            /* Map remaining entries to their sub-pages.  BLE (0), Shift+Tab
+             * (2) and Quick Action (3) are handled above; their entries
+             * here are placeholders. */
             const InfoPage pages[INFO_MENU_COUNT] = {
-                0, InfoPageTranscript, 0, InfoPageHelp, InfoPageAbout, InfoPageUsage};
+                0, InfoPageTranscript, 0, 0, InfoPageHelp, InfoPageAbout, InfoPageUsage};
             m->page = pages[m->index];
             m->scroll = 0;
             m->h_scroll = 0;
@@ -1473,6 +1507,37 @@ static bool perm_input(InputEvent* event, void* context) {
     return false;
 }
 
+// ── Quick Action text editor (TextInput module) ────────────────────
+
+/* Reject characters that would break the unescaped JSON string building
+ * in protocol_build_hello/protocol_build_qa_set (see protocol.c — none
+ * of this protocol's builders escape their string args). */
+static bool qa_input_validator(const char* text, FuriString* error, void* context) {
+    (void)context;
+    for(const char* p = text; *p; p++) {
+        if(*p == '"' || *p == '\\') {
+            if(error) furi_string_set(error, "No \" or \\ allowed");
+            return false;
+        }
+    }
+    return true;
+}
+
+static uint32_t qa_input_back(void* context) {
+    (void)context;
+    return ViewIdInfo;
+}
+
+static void qa_input_done(void* context) {
+    UiState* ui = context;
+    if(!ui) return;
+    app_settings_set_quick_action(ui->qa_edit_buf);
+    if(ui->event_callback)
+        ui->event_callback(UiEventQuickActionSet, ui->qa_edit_buf, ui->event_context);
+    ui->current_view = ViewIdInfo;
+    view_dispatcher_switch_to_view(ui->view_dispatcher, ViewIdInfo);
+}
+
 // ── Public API ───────────────────────────────────────────────────
 
 UiState* ui_alloc(Gui* gui) {
@@ -1524,6 +1589,16 @@ UiState* ui_alloc(Gui* gui) {
     view_set_context(ui->info_view, ui);
     view_dispatcher_add_view(ui->view_dispatcher, ViewIdInfo, ui->info_view);
 
+    // Quick Action text input (Bridge mode "MENU" entry)
+    ui->text_input = text_input_alloc();
+    text_input_set_header_text(ui->text_input, "Quick Action (blank=default)");
+    text_input_show_illegal_symbols(ui->text_input, true); // allow '/' for slash-commands
+    text_input_set_validator(ui->text_input, qa_input_validator, ui);
+    text_input_set_result_callback(
+        ui->text_input, qa_input_done, ui, ui->qa_edit_buf, sizeof(ui->qa_edit_buf), false);
+    view_set_previous_callback(text_input_get_view(ui->text_input), qa_input_back);
+    view_dispatcher_add_view(ui->view_dispatcher, ViewIdTextInput, text_input_get_view(ui->text_input));
+
     // Animation timer (150ms tick for character animations)
     ui->anim_timer = furi_timer_alloc(anim_tick, FuriTimerTypePeriodic, ui);
     furi_timer_start(ui->anim_timer, 150);
@@ -1543,10 +1618,12 @@ void ui_free(UiState* ui) {
     view_dispatcher_remove_view(ui->view_dispatcher, ViewIdMenu);
     view_dispatcher_remove_view(ui->view_dispatcher, ViewIdPerm);
     view_dispatcher_remove_view(ui->view_dispatcher, ViewIdInfo);
+    view_dispatcher_remove_view(ui->view_dispatcher, ViewIdTextInput);
     view_free(ui->status_view);
     view_free(ui->menu_view);
     view_free(ui->perm_view);
     view_free(ui->info_view);
+    text_input_free(ui->text_input);
     view_dispatcher_free(ui->view_dispatcher);
     free(ui);
 }
@@ -1668,6 +1745,18 @@ void ui_set_rssi(UiState* ui, int rssi) {
         m->rssi_bars = 0;
     } else {
         m->rssi_bars = rssi_to_bars(rssi);
+    }
+    view_commit_model(ui->status_view, true);
+}
+
+void ui_set_quick_action(UiState* ui, const char* text) {
+    if(!ui) return;
+    StatusModel* m = view_get_model(ui->status_view);
+    if(text) {
+        strncpy(m->quick_action, text, sizeof(m->quick_action) - 1);
+        m->quick_action[sizeof(m->quick_action) - 1] = '\0';
+    } else {
+        m->quick_action[0] = '\0';
     }
     view_commit_model(ui->status_view, true);
 }

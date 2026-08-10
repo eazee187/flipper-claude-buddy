@@ -13,9 +13,10 @@
 #define SETTINGS_FILE   "/ext/apps_data/claude_buddy/settings.bin"
 
 /* V1 was just [version, ble_mode].  V2 adds owner_name + device_name.
- * V1 readers continue to work when we read a V2 file (they only look
- * at bytes 0-1); V2 readers upgrade V1 files by defaulting new fields. */
-#define SETTINGS_VERSION 2
+ * V3 adds quick_action.  Readers of an older version continue to work
+ * when we read a newer file (they only look at their own known bytes);
+ * newer readers upgrade older files by defaulting new fields. */
+#define SETTINGS_VERSION 3
 
 typedef struct __attribute__((packed)) {
     uint8_t version;
@@ -23,6 +24,7 @@ typedef struct __attribute__((packed)) {
     /* NUL-terminated within the allotted buffer; unused tail bytes zero. */
     char owner_name[APP_SETTINGS_NAME_MAX];
     char device_name[APP_SETTINGS_DEVNAME_MAX];
+    char quick_action[APP_SETTINGS_QA_MAX];
 } AppSettingsFile;
 
 static void zero_out(AppSettingsFile* s) {
@@ -45,13 +47,18 @@ static void read_all(AppSettingsFile* out) {
                 if(storage_file_read(f, &mode, 1) == 1 && mode <= BleModeDesktop) {
                     out->ble_mode = mode;
                 }
-            } else if(ver == 2) {
-                /* Rewind to the start and read the full struct. */
+            } else if(ver == 2 || ver == 3) {
+                /* Rewind to the start and read the full struct. A V2 file
+                 * is shorter than sizeof(*out) (missing quick_action) —
+                 * storage_file_read short-reads and leaves the tail as
+                 * zero_out() already set it, so quick_action defaults to
+                 * empty for upgraded V2 files. */
                 storage_file_seek(f, 0, true);
                 storage_file_read(f, out, sizeof(*out));
                 if(out->ble_mode > BleModeDesktop) out->ble_mode = BleModeBridge;
                 out->owner_name[APP_SETTINGS_NAME_MAX - 1] = '\0';
                 out->device_name[APP_SETTINGS_DEVNAME_MAX - 1] = '\0';
+                out->quick_action[APP_SETTINGS_QA_MAX - 1] = '\0';
             }
         }
     }
@@ -125,6 +132,23 @@ void app_settings_set_device_name(const char* name) {
     read_all(&s);
     memset(s.device_name, 0, sizeof(s.device_name));
     if(name) strlcpy(s.device_name, name, sizeof(s.device_name));
+    s.version = SETTINGS_VERSION;
+    write_all(&s);
+}
+
+bool app_settings_get_quick_action(char* out, int out_size) {
+    if(!out || out_size <= 0) return false;
+    AppSettingsFile s;
+    read_all(&s);
+    strlcpy(out, s.quick_action, (size_t)out_size);
+    return out[0] != '\0';
+}
+
+void app_settings_set_quick_action(const char* text) {
+    AppSettingsFile s;
+    read_all(&s);
+    memset(s.quick_action, 0, sizeof(s.quick_action));
+    if(text) strlcpy(s.quick_action, text, sizeof(s.quick_action));
     s.version = SETTINGS_VERSION;
     write_all(&s);
 }

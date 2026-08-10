@@ -124,6 +124,7 @@ bool protocol_parse(const char* json_line, ProtocolMessage* msg) {
                 msg->has_rssi = true;
                 msg->rssi = (int16_t)rssi;
             }
+            json_get_string(d_start, "qa", msg->quick_action, sizeof(msg->quick_action));
         }
         break;
     default:
@@ -138,13 +139,21 @@ static int build_simple(char* buf, int buf_size, const char* type) {
     return snprintf(buf, buf_size, "{\"v\":1,\"t\":\"%s\",\"d\":{}}\n", type);
 }
 
-int protocol_build_hello(char* buf, int buf_size) {
+int protocol_build_hello(char* buf, int buf_size, const char* quick_action) {
     if(!buf || buf_size <= 0) return 0;
     const char* pet = furi_hal_version_get_name_ptr();
     return snprintf(
         buf, buf_size,
-        "{\"v\":1,\"t\":\"hello\",\"d\":{\"fw\":\"0.1.0\",\"bt\":\"%s\"}}\n",
-        pet ? pet : "");
+        "{\"v\":1,\"t\":\"hello\",\"d\":{\"fw\":\"0.1.0\",\"bt\":\"%s\",\"qa\":\"%s\"}}\n",
+        pet ? pet : "", quick_action ? quick_action : "");
+}
+
+int protocol_build_qa_set(char* buf, int buf_size, const char* text) {
+    if(!buf || buf_size <= 0) return 0;
+    return snprintf(
+        buf, buf_size,
+        "{\"v\":1,\"t\":\"qa_set\",\"d\":{\"qa\":\"%s\"}}\n",
+        text ? text : "");
 }
 
 int protocol_build_cmd(char* buf, int buf_size, const char* text) {

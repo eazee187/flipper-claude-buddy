@@ -29,6 +29,10 @@ class Daemon:
         self._cmd_map: dict[str, str] = {}  # truncated -> full command
         self._space_repeat_task: asyncio.Task | None = None
         self._session_targets: OrderedDict[str, dict[str, str]] = OrderedDict()
+        # config.QUICK_ACTION starts as the env-var/plugin-option default;
+        # remember it so an on-device override (hello's "qa" / a "qa_set"
+        # message) can be reverted when the device clears its override.
+        self._default_quick_action = config.QUICK_ACTION
 
         self.serial.on_message(self._handle_flipper_msg)
         self.serial.on_connect(self._send_initial_state)
@@ -51,6 +55,7 @@ class Daemon:
                     log.warning("Failed to cache BT name: %s", e)
             if bt_name:
                 _save_bt_name_to_plugin_config(bt_name)
+            self._apply_device_quick_action(data.get("qa", ""))
             # Flipper app just (re)started — cancel any pending permission request
             if self._perm_future and not self._perm_future.done():
                 log.info("Cancelling stale permission request")
@@ -70,6 +75,9 @@ class Daemon:
             else:
                 log.warning("No commands loaded — menu not sent")
             self._menu_sent = True
+
+        elif msg_type == "qa_set":
+            self._apply_device_quick_action(data.get("qa", ""))
 
         elif msg_type == "cmd":
             text = data.get("text", "")
@@ -112,28 +120,40 @@ class Daemon:
                 )
 
         elif msg_type == "voice":
-            log.info("Voice UP received (dictating=%s)", self._dictating)
-            try:
-                if self._dictating:
-                    self._dictating = False
-                    await self._dictation.stop()
-                    await self._send_keystroke("escape")
-                    # Button already played sound+vibro locally; just reset LED
-                    await self.serial.send(
-                        protocol.notify_msg("voice_stop_quiet", vibro=False, text="")
+            if config.DICTATION_BACKEND == "none":
+                # No dictation backend configured — the Up button doubles as
+                # a stateless quick-action instead of toggling dictation.
+                log.info("Quick action: sending %r", config.QUICK_ACTION)
+                await self._send_to_claude(config.QUICK_ACTION)
+                await self.serial.send(
+                    protocol.notify_msg(
+                        "success", vibro=True,
+                        text=config.QUICK_ACTION[:21], subtext="sent",
                     )
-                    log.info("Dictation stopped")
-                else:
-                    await self._dictation.start()
-                    self._dictating = True
-                    # Button already played sound+vibro locally; just start LED blink
-                    await self.serial.send(
-                        protocol.notify_msg("voice_start_led", vibro=False, text="")
-                    )
-                    log.info("Dictation started")
-            except Exception as e:
-                log.error("Voice handler error: %s", e)
-                await self.serial.send(protocol.status_msg("", ""))
+                )
+            else:
+                log.info("Voice UP received (dictating=%s)", self._dictating)
+                try:
+                    if self._dictating:
+                        self._dictating = False
+                        await self._dictation.stop()
+                        await self._send_keystroke("escape")
+                        # Button already played sound+vibro locally; just reset LED
+                        await self.serial.send(
+                            protocol.notify_msg("voice_stop_quiet", vibro=False, text="")
+                        )
+                        log.info("Dictation stopped")
+                    else:
+                        await self._dictation.start()
+                        self._dictating = True
+                        # Button already played sound+vibro locally; just start LED blink
+                        await self.serial.send(
+                            protocol.notify_msg("voice_start_led", vibro=False, text="")
+                        )
+                        log.info("Dictation started")
+                except Exception as e:
+                    log.error("Voice handler error: %s", e)
+                    await self.serial.send(protocol.status_msg("", ""))
 
         elif msg_type == "backspace":
             await self._send_keystroke("backspace")
@@ -523,6 +543,17 @@ class Daemon:
 
     async def _send_to_claude(self, text: str):
         await self._input.send_text(text)
+
+    def _apply_device_quick_action(self, text: str) -> None:
+        """Apply the Flipper's persisted quick-action override (empty = none,
+        revert to the env-var/plugin-option default). Called from both
+        "hello" (announces the persisted value on every connect) and
+        "qa_set" (fired immediately when the user saves a new value on
+        the device)."""
+        new_value = text if text else self._default_quick_action
+        if new_value != config.QUICK_ACTION:
+            config.QUICK_ACTION = new_value
+            log.info("Quick action now %r (source=%s)", new_value, "device" if text else "default")
 
     async def _space_repeat_loop(self):
         first_send = True

@@ -56,6 +56,8 @@ Once paired, Claude Desktop auto-reconnects whenever both sides are online.
 | BACK | Send Backspace (⌫) |
 | BACK (hold) | Exit |
 
+On Linux, where dictation is disabled by default, UP instead sends a configurable quick-action command (default `/compact`) and presses Enter — set `FLIPPER_QUICK_ACTION`/the plugin's Quick Action Command option, or change it directly on the Flipper: hold **Right → MENU → Quick Action**, type the new command (leave blank to fall back to the host default), OK to save. Takes effect immediately, no reconnect needed.
+
 ## Setup
 
 ### 1. Install the Flipper app

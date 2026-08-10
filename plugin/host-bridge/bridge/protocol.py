@@ -64,10 +64,12 @@ def usage_msg(
     return encode("usage", d)
 
 
-def ping_msg(rssi: int | None = None) -> bytes:
-    d: dict[str, int] = {}
+def ping_msg(rssi: int | None = None, quick_action: str | None = None) -> bytes:
+    d: dict = {}
     if rssi is not None:
         d["rssi"] = int(rssi)
+    if quick_action is not None:
+        d["qa"] = quick_action[:21]
     return encode("ping", d)
 
 

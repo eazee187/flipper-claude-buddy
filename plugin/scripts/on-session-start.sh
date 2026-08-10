@@ -46,6 +46,11 @@ if [ -n "${CLAUDE_PLUGIN_OPTION_transport:-}" ]; then
     export FLIPPER_TRANSPORT="$CLAUDE_PLUGIN_OPTION_transport"
 fi
 
+# Forward plugin userConfig quickAction to bridge env var
+if [ -n "${CLAUDE_PLUGIN_OPTION_quickAction:-}" ]; then
+    export FLIPPER_QUICK_ACTION="$CLAUDE_PLUGIN_OPTION_quickAction"
+fi
+
 # Forward plugin userConfig bluetoothName to bridge env var.
 # If not set, fall back to previously auto-detected name from cache.
 BT_NAME_CACHE="$PLUGIN_DATA/bt_name"

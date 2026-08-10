@@ -4,12 +4,15 @@
 #include <gui/gui.h>
 #include <gui/view.h>
 #include <gui/view_dispatcher.h>
+#include <gui/modules/text_input.h>
+#include "app_settings.h"
 
 typedef enum {
     ViewIdStatus,
     ViewIdMenu,
     ViewIdPerm,
     ViewIdInfo,
+    ViewIdTextInput,
 } ViewId;
 
 typedef enum {
@@ -39,6 +42,7 @@ typedef enum {
     UiEventCtrlE,        // transcript mode: Ctrl+E
     UiEventShiftTab,     // toggle plan mode (Shift+Tab)
     UiEventToggleBleMode, // BLE profile toggled between Bridge and Desktop
+    UiEventQuickActionSet, // on-device quick-action text saved; data = new text
 } UiEventType;
 
 typedef enum {
@@ -73,6 +77,8 @@ typedef struct {
     uint8_t context_pct;    // context-window-remaining %, 0-100 (Bridge only)
     bool has_context_pct;   // false until the first "usage" message with a
                             // "pct" field arrives this app run
+    char quick_action[24];  // host's configured quick-action text; empty =
+                            // dictation mode (header shows "Mic" hint instead)
 } StatusModel;
 
 #define MAX_MENU_ITEMS 256
@@ -117,6 +123,8 @@ typedef struct {
     View* menu_view;
     View* perm_view;
     View* info_view;
+    TextInput* text_input;
+    char qa_edit_buf[APP_SETTINGS_QA_MAX]; // scratch buffer owned by text_input while editing
     FuriTimer* anim_timer;
     UiEventCallback event_callback;
     void* event_context;
@@ -140,6 +148,7 @@ void ui_show_info(UiState* ui);
 void ui_back_to_status(UiState* ui);
 void ui_set_muted(UiState* ui, bool muted);
 void ui_set_rssi(UiState* ui, int rssi);
+void ui_set_quick_action(UiState* ui, const char* text);
 void ui_set_context_pct(UiState* ui, int pct);
 void ui_run(UiState* ui);
 void ui_stop(UiState* ui);

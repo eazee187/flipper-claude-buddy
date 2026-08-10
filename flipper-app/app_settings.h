@@ -25,6 +25,7 @@ typedef enum {
 
 #define APP_SETTINGS_NAME_MAX    32
 #define APP_SETTINGS_DEVNAME_MAX 18  /* matches FURI_HAL_VERSION_DEVICE_NAME_LENGTH */
+#define APP_SETTINGS_QA_MAX      24  /* matches ProtocolMessage.quick_action / StatusModel.quick_action */
 
 BleMode app_settings_get_ble_mode(void);
 /* Returns true on successful write. */
@@ -39,6 +40,12 @@ void app_settings_set_owner_name(const char* name);
  * use the default "Claude Flipper". */
 bool app_settings_get_device_name(char* out, int out_size);
 void app_settings_set_device_name(const char* name);
+
+/* On-device override for the Up-button quick-action text (Bridge mode
+ * only). Empty = no override; the host's FLIPPER_QUICK_ACTION/default
+ * applies instead. Set from the on-device MENU's "Quick Action" entry. */
+bool app_settings_get_quick_action(char* out, int out_size);
+void app_settings_set_quick_action(const char* text);
 
 #ifdef __cplusplus
 }

@@ -26,6 +26,7 @@ typedef enum {
     MsgTypeHello,
     MsgTypePong,
     MsgTypeYes,
+    MsgTypeQaSet, // on-device quick-action text changed (Bridge mode)
     /* Synthesised from an Anthropic heartbeat snapshot. Distinct from
      * MsgTypeStatus so the GUI thread can drive sound + pose transitions
      * based on total/running/waiting counter deltas. */
@@ -42,6 +43,12 @@ typedef struct {
     bool claude_connected; // claude code session state
     bool has_rssi;
     int16_t rssi;
+    /* Host's configured quick-action text (e.g. "/compact"), sent on every
+     * ping while the host's dictation backend is "none". Empty when the
+     * host is in dictation mode — the header falls back to the "Mic"
+     * hint in that case. Not reset between messages (see rx_msg_buf in
+     * claude_buddy.c), matching has_rssi/rssi's persistence pattern. */
+    char quick_action[24];
     /* Anthropic NUS protocol additions (zero/empty when not applicable):
      *   perm_id     — id of the pending permission prompt, echoed back on
      *                 the user's decision
@@ -82,7 +89,8 @@ typedef struct {
 bool protocol_parse(const char* json_line, ProtocolMessage* msg);
 
 // Build outgoing JSON messages into buf. Returns bytes written.
-int protocol_build_hello(char* buf, int buf_size);
+int protocol_build_hello(char* buf, int buf_size, const char* quick_action);
+int protocol_build_qa_set(char* buf, int buf_size, const char* text);
 int protocol_build_cmd(char* buf, int buf_size, const char* text);
 int protocol_build_enter(char* buf, int buf_size);
 int protocol_build_esc(char* buf, int buf_size);

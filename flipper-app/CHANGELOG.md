@@ -1,3 +1,9 @@
+## v0.7.4
+
+- The Up button, when dictation is disabled (the Linux default), sends a configurable quick-action command (e.g. `/compact`) — now configurable directly on the Flipper: hold Right → MENU → Quick Action, type a new command (blank = revert to host default), OK to save. Takes effect immediately, no reconnect needed. Still configurable via `FLIPPER_QUICK_ACTION`/the plugin's Quick Action Command option as before.
+- The status header now shows the actual configured quick-action text (e.g. "/compact") instead of a generic "Mic" hint when dictation is disabled.
+- Fixed `ydotool` (Linux Wayland) sending wrong key names for Enter/Escape/Page Up/Page Down (X11 keysym names instead of the Linux `KEY_*` names ydotool expects) — Enter presses were landing as a literal "r" keystroke, breaking the Up-button quick action and occasionally the OK-button confirm.
+
 ## v0.7.3
 
 - Fixed `ydotool` (Linux Wayland) mis-typing characters on German (QWERTZ) keyboard layouts — e.g. `/` arriving as `-`. The bridge now auto-detects the system layout and remaps the common German-layout differences; override with `FLIPPER_KEYBOARD_LAYOUT=de|us`.

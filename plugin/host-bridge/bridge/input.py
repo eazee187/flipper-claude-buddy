@@ -478,6 +478,26 @@ class XdotoolInputBackend(InputBackend):
 # pairs. Reuses _XDOTOOL_KEY_NAMES / _MACOS_KEYCODE_TO_XSYM / _MACOS_MOD_TO_XDOTOOL
 # defined above for XdotoolInputBackend.
 
+# ydotool's `key` parser matches against Linux kernel KEY_* names (from
+# linux/input-event-codes.h), not X11 keysym names — so it needs "Enter"
+# where X11/xdotool use "Return", "Esc" not "Escape", "PageUp"/"PageDown"
+# not "Prior"/"Next". Passing the wrong name silently does something else
+# entirely rather than erroring (e.g. "Return" was observed producing a
+# literal "r" keypress instead of Enter).
+_YDOTOOL_KEY_NAMES: dict[str, str] = {
+    "return":    "Enter",
+    "escape":    "Esc",
+    "down":      "Down",
+    "up":        "Up",
+    "left":      "Left",
+    "right":     "Right",
+    "space":     "Space",
+    "tab":       "Tab",
+    "backspace": "Backspace",
+    "page_up":   "PageUp",
+    "page_down": "PageDown",
+}
+
 # ydotool's `type`/`key` inject raw evdev keycodes built from a fixed,
 # US-QWERTY-assumed character table — it has no concept of the compositor's
 # actual layout. On a German (QWERTZ) system the compositor decodes those
@@ -590,12 +610,12 @@ class YdotoolInputBackend(InputBackend):
         await _run_ydotool(["key", "ctrl+c"], "Ctrl+C")
 
     async def send_keystroke(self, key: str) -> None:
-        xsym = _XDOTOOL_KEY_NAMES.get(key, key)
+        xsym = _YDOTOOL_KEY_NAMES.get(key, key)
         await _run_ydotool(["key", xsym], f"keystroke({key})")
 
     async def send_text(self, text: str) -> None:
         await _run_ydotool(["type", "--", _remap_for_layout(text)], "type")
-        await _run_ydotool(["key", "Return"], "Return")
+        await _run_ydotool(["key", _YDOTOOL_KEY_NAMES["return"]], "Return")
 
     async def send_chars(self, text: str, *, focus: bool = True) -> None:
         await _run_ydotool(["type", "--", _remap_for_layout(text)], "type_chars")

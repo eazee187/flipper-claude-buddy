@@ -38,6 +38,11 @@ DICTATION_STOP_CMD = os.environ.get("FLIPPER_DICTATION_STOP_CMD", "")
 # presses UP again (manual toggle mode).
 DICTATION_CHECK_CMD = os.environ.get("FLIPPER_DICTATION_CHECK_CMD", "")
 
+# Text/command sent to Claude Code (typed + Enter) when the Up button is
+# pressed and dictation is disabled (DICTATION_BACKEND == "none" — the
+# Linux default). No effect when a real dictation backend is active.
+QUICK_ACTION = os.environ.get("FLIPPER_QUICK_ACTION", "/compact")
+
 # Transport selection: "auto" (default), "usb", or "ble"
 # "auto" tries USB first, then BLE — matching Flipper app behaviour.
 TRANSPORT = os.environ.get("FLIPPER_TRANSPORT", "auto")
