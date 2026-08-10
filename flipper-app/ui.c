@@ -1592,7 +1592,14 @@ UiState* ui_alloc(Gui* gui) {
     // Quick Action text input (Bridge mode "MENU" entry)
     ui->text_input = text_input_alloc();
     text_input_set_header_text(ui->text_input, "Quick Action (blank=default)");
-    text_input_show_illegal_symbols(ui->text_input, true); // allow '/' for slash-commands
+#if __has_include(<momentum/momentum.h>)
+    /* text_input_show_illegal_symbols is a Momentum-only addition (not in
+     * the stock/official SDK CI builds against) — Momentum's TextInput
+     * otherwise hides '/' etc. from the symbols keyboard by default
+     * (assuming filename entry), so opt back in for slash-commands. Guard
+     * with __has_include so this still links against the stock SDK. */
+    text_input_show_illegal_symbols(ui->text_input, true);
+#endif
     text_input_set_validator(ui->text_input, qa_input_validator, ui);
     text_input_set_result_callback(
         ui->text_input, qa_input_done, ui, ui->qa_edit_buf, sizeof(ui->qa_edit_buf), false);
