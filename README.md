@@ -107,7 +107,7 @@ sudo apt install ydotool
 sudo systemctl enable --now ydotoold   # background service ydotool talks to
 sudo usermod -aG input $USER           # needed for /dev/uinput access; log out and back in
 ```
-Note: `ydotool` has no concept of a target window — unlike `xdotool`, keystrokes always go to whatever the compositor currently has focused, so multi-terminal targeting doesn't apply under Wayland. To force a specific backend (or disable forwarding entirely) set `FLIPPER_INPUT_BACKEND=xdotool`, `ydotool`, or `none`.
+Note: `ydotool` has no concept of a target window — unlike `xdotool`, keystrokes always go to whatever the compositor currently has focused, so multi-terminal targeting doesn't apply under Wayland. To force a specific backend (or disable forwarding entirely) set `FLIPPER_INPUT_BACKEND=xdotool`, `ydotool`, or `none`. `ydotool` also assumes a US-QWERTY layout regardless of your actual one, so some characters can land wrong (e.g. `/` typed as `-` on German QWERTZ) — the bridge auto-corrects the common German-layout differences, or set `FLIPPER_KEYBOARD_LAYOUT=de|us` to override detection.
 
 **Linux — BLE:** BLE transport works via BlueZ. Make sure BlueZ is installed and running:
 ```bash

@@ -478,6 +478,75 @@ class XdotoolInputBackend(InputBackend):
 # pairs. Reuses _XDOTOOL_KEY_NAMES / _MACOS_KEYCODE_TO_XSYM / _MACOS_MOD_TO_XDOTOOL
 # defined above for XdotoolInputBackend.
 
+# ydotool's `type`/`key` inject raw evdev keycodes built from a fixed,
+# US-QWERTY-assumed character table — it has no concept of the compositor's
+# actual layout. On a German (QWERTZ) system the compositor decodes those
+# keycodes using the German layout, so some characters arrive wrong (e.g.
+# "/" lands as "-"). This table maps each *desired* rendered character to
+# the *substitute* character to hand ydotool instead, for every US/DE key
+# whose assignment differs by simple substitution (dead-key accents like
+# "´ ` ^ °" need a press-then-space sequence and are intentionally excluded).
+_DE_YDOTOOL_CHAR_REMAP: dict[str, str] = {
+    # letters (Y/Z swapped)
+    "z": "y", "Z": "Y",
+    "y": "z", "Y": "Z",
+    # bracket/backslash row
+    "ü": "[", "Ü": "{",
+    "+": "]", "*": "}",
+    "#": "\\",
+    # home row
+    "ö": ";", "Ö": ":",
+    "ä": "'", "Ä": '"',
+    # bottom row
+    ";": "<", ":": ">",
+    "-": "/", "_": "?",
+    # number row (unshifted "-" key)
+    "ß": "-", "?": "_",
+    # number row shifted symbols
+    '"': "@", "§": "#", "&": "^", "/": "&", "(": "*", ")": "(", "=": ")",
+}
+
+_keyboard_layout_cache: str | None = None
+
+
+def _detect_keyboard_layout() -> str:
+    """Resolve the active keyboard layout for ydotool's remap table.
+
+    Cached for the process lifetime — layout doesn't change mid-session.
+    """
+    global _keyboard_layout_cache
+    if _keyboard_layout_cache is not None:
+        return _keyboard_layout_cache
+
+    configured = config.KEYBOARD_LAYOUT.strip().lower()
+    if configured != "auto":
+        _keyboard_layout_cache = configured
+        return _keyboard_layout_cache
+
+    layout = "us"
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["localectl", "status"],
+            capture_output=True, text=True, timeout=2,
+        ).stdout
+        for line in out.splitlines():
+            if "X11 Layout" in line:
+                layout = line.split(":", 1)[1].strip().split(",")[0]
+                break
+    except Exception:
+        pass
+
+    log.info("Detected system keyboard layout: %s", layout)
+    _keyboard_layout_cache = layout
+    return layout
+
+
+def _remap_for_layout(text: str) -> str:
+    if _detect_keyboard_layout() != "de":
+        return text
+    return "".join(_DE_YDOTOOL_CHAR_REMAP.get(c, c) for c in text)
+
 
 async def _run_ydotool(args: list[str], context: str) -> None:
     try:
@@ -525,11 +594,11 @@ class YdotoolInputBackend(InputBackend):
         await _run_ydotool(["key", xsym], f"keystroke({key})")
 
     async def send_text(self, text: str) -> None:
-        await _run_ydotool(["type", "--", text], "type")
+        await _run_ydotool(["type", "--", _remap_for_layout(text)], "type")
         await _run_ydotool(["key", "Return"], "Return")
 
     async def send_chars(self, text: str, *, focus: bool = True) -> None:
-        await _run_ydotool(["type", "--", text], "type_chars")
+        await _run_ydotool(["type", "--", _remap_for_layout(text)], "type_chars")
 
     async def send_modified_keystroke(self, key_code: int, modifiers: str) -> None:
         xsym = _MACOS_KEYCODE_TO_XSYM.get(key_code, str(key_code))

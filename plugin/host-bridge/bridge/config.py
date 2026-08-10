@@ -47,6 +47,14 @@ TRANSPORT = os.environ.get("FLIPPER_TRANSPORT", "auto")
 # or "none" (disable keystroke forwarding entirely). Linux only.
 INPUT_BACKEND = os.environ.get("FLIPPER_INPUT_BACKEND", "auto")
 
+# Keyboard layout for the ydotool backend: "auto" (default — detected via
+# `localectl status` at first use), "de", or anything else (no remap
+# applied). ydotool injects raw US-QWERTY keycodes regardless of the
+# compositor's actual layout, so on a non-US system some characters land
+# wrong (e.g. "/" arrives as "-" on German QWERTZ) — see input.py's
+# _DE_YDOTOOL_CHAR_REMAP. Only "de" currently has a remap table.
+KEYBOARD_LAYOUT = os.environ.get("FLIPPER_KEYBOARD_LAYOUT", "auto")
+
 # Path to cache file for auto-detected BT name (set by plugin session-start hook)
 _plugin_data = os.environ.get("FLIPPER_PLUGIN_DATA", "")
 BT_NAME_CACHE = os.path.join(_plugin_data, "bt_name") if _plugin_data else ""
