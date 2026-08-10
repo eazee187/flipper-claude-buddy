@@ -1,3 +1,8 @@
+## v0.7.3
+
+- Fixed `ydotool` (Linux Wayland) mis-typing characters on German (QWERTZ) keyboard layouts — e.g. `/` arriving as `-`. The bridge now auto-detects the system layout and remaps the common German-layout differences; override with `FLIPPER_KEYBOARD_LAYOUT=de|us`.
+- Fixed the on-device permission prompt (OK/Select) sometimes not registering: a status/notify update arriving from the host while the prompt was showing could silently evict it back to the status screen, so the next button press sent a plain keystroke instead of the permission decision. Reproduced over both USB and BLE since it was a GUI-thread view-arbitration bug, not a transport issue.
+
 ## v0.7.2
 
 - Usage page and header context-% now source their numbers from the [ecc plugin](https://github.com/affaan-m/ECC) instead of computing them independently — install ecc for reliable data; without it these stay empty. README documents how to install ecc.
