@@ -1573,7 +1573,8 @@ void ui_show_status(UiState* ui, const char* text, bool connected) {
         m->anim_frame = 0;
     }
     view_commit_model(ui->status_view, true);
-    if(ui->current_view != ViewIdMenu && ui->current_view != ViewIdInfo) {
+    if(ui->current_view != ViewIdMenu && ui->current_view != ViewIdInfo &&
+       ui->current_view != ViewIdPerm) {
         ui->current_view = ViewIdStatus;
         view_dispatcher_switch_to_view(ui->view_dispatcher, ViewIdStatus);
     }
@@ -1600,7 +1601,8 @@ void ui_show_status2(UiState* ui, const char* text, const char* subtext, bool co
         m->anim_frame = 0;
     }
     view_commit_model(ui->status_view, true);
-    if(ui->current_view != ViewIdMenu && ui->current_view != ViewIdInfo) {
+    if(ui->current_view != ViewIdMenu && ui->current_view != ViewIdInfo &&
+       ui->current_view != ViewIdPerm) {
         ui->current_view = ViewIdStatus;
         view_dispatcher_switch_to_view(ui->view_dispatcher, ViewIdStatus);
     }
