@@ -64,6 +64,15 @@ def usage_msg(
     return encode("usage", d)
 
 
+def ratelimit_msg(session_pct: int | None, week_pct: int | None) -> bytes:
+    d: dict = {}
+    if session_pct is not None:
+        d["r5"] = int(session_pct)
+    if week_pct is not None:
+        d["rw"] = int(week_pct)
+    return encode("ratelimit", d)
+
+
 def ping_msg(rssi: int | None = None, quick_action: str | None = None) -> bytes:
     d: dict = {}
     if rssi is not None:

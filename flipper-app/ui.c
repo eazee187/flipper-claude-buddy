@@ -1176,19 +1176,37 @@ static void info_draw(Canvas* canvas, void* model) {
         canvas_set_font(canvas, FontSecondary);
         UsageStats u;
         usage_stats_get(&u);
-        if(!u.has_data) {
+        if(!u.has_data && !u.has_ratelimit_session && !u.has_ratelimit_week) {
             canvas_draw_str_aligned(canvas, 64, 33, AlignCenter, AlignCenter, "(no data yet)");
         } else {
             char line[24];
-            snprintf(line, sizeof(line), "In: %lu", (unsigned long)u.input_tokens);
-            canvas_draw_str(canvas, 2, 19, line);
-            snprintf(line, sizeof(line), "Out: %lu", (unsigned long)u.output_tokens);
-            canvas_draw_str(canvas, 2, 29, line);
-            snprintf(line, sizeof(line), "Cache: %lu", (unsigned long)(u.cache_write_tokens + u.cache_read_tokens));
-            canvas_draw_str(canvas, 2, 39, line);
-            snprintf(line, sizeof(line), "Est: $%lu.%02lu",
-                     (unsigned long)(u.cost_cents / 100), (unsigned long)(u.cost_cents % 100));
-            canvas_draw_str(canvas, 2, 49, line);
+            int y = 17; // 8px steps (was 10px/4 lines); still clears FTR_Y(53) with 5 lines
+            if(u.has_data) {
+                snprintf(line, sizeof(line), "In: %lu", (unsigned long)u.input_tokens);
+                canvas_draw_str(canvas, 2, y, line);
+                y += 8;
+                snprintf(line, sizeof(line), "Out: %lu", (unsigned long)u.output_tokens);
+                canvas_draw_str(canvas, 2, y, line);
+                y += 8;
+                snprintf(line, sizeof(line), "Cache: %lu", (unsigned long)(u.cache_write_tokens + u.cache_read_tokens));
+                canvas_draw_str(canvas, 2, y, line);
+                y += 8;
+                snprintf(line, sizeof(line), "Est: $%lu.%02lu",
+                         (unsigned long)(u.cost_cents / 100), (unsigned long)(u.cost_cents % 100));
+                canvas_draw_str(canvas, 2, y, line);
+                y += 8;
+            }
+            if(u.has_ratelimit_session || u.has_ratelimit_week) {
+                if(u.has_ratelimit_session && u.has_ratelimit_week) {
+                    snprintf(line, sizeof(line), "RL 5h:%ld%% Wk:%ld%%",
+                             (long)u.ratelimit_session_pct, (long)u.ratelimit_week_pct);
+                } else if(u.has_ratelimit_session) {
+                    snprintf(line, sizeof(line), "RL 5h: %ld%%", (long)u.ratelimit_session_pct);
+                } else {
+                    snprintf(line, sizeof(line), "RL Wk: %ld%%", (long)u.ratelimit_week_pct);
+                }
+                canvas_draw_str(canvas, 2, y, line);
+            }
         }
         draw_footer_sep(canvas);
         hint_back(canvas, "Back");

@@ -460,6 +460,10 @@ static void process_message(App* app, ProtocolMessage* msg) {
         }
         break;
 
+    case MsgTypeRatelimit:
+        usage_stats_set_ratelimit(msg->ratelimit_session_pct, msg->ratelimit_week_pct);
+        break;
+
     case MsgTypePerm: {
         bool desktop = app->current_ble_mode == BleModeDesktop;
         /* State-machine entry is idempotent — safe on every heartbeat. */

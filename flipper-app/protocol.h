@@ -15,6 +15,7 @@ typedef enum {
     MsgTypeState,
     MsgTypePerm,
     MsgTypeUsage,
+    MsgTypeRatelimit,
     // Flipper -> Host
     MsgTypeCmd,
     MsgTypeEnter,
@@ -77,6 +78,13 @@ typedef struct {
      * message" (the sender omits it when no new usage was seen that
      * batch) — distinct from a legitimate 0%. */
     int32_t usage_context_pct;
+    /* Claude account-wide rate-limit usage, 0-100 (for MsgTypeRatelimit).
+     * -1 means "not present in this message", same sentinel convention as
+     * usage_context_pct. Distinct from the usage_* fields above: sent on
+     * its own timer, independent of per-response token/cost updates, so it
+     * must never be mistaken for (or overwrite) those. */
+    int32_t ratelimit_session_pct;
+    int32_t ratelimit_week_pct;
     /* Per-kind payloads deferred to the GUI thread.  Keeping storage /
      * hardware side-effects off the BLE event callback thread avoids
      * deadlocks and long-blocking operations on that critical path. */

@@ -16,6 +16,11 @@ PING_INTERVAL = 5.0
 
 DICTATION_POLL_INTERVAL = 2.0
 
+# How often to shell out to `claude /usage` and push the 5h/weekly rate-limit
+# percentages to the Flipper's Usage page. Account-wide, not per-session, so
+# this lives on the daemon's own timer rather than the per-response Stop hook.
+RATELIMIT_POLL_INTERVAL = float(os.environ.get("FLIPPER_RATELIMIT_POLL_INTERVAL", "300"))
+
 SPACE_REPEAT_INTERVAL = 0.01
 
 # ---------------------------------------------------------------------------

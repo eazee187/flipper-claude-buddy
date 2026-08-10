@@ -4,9 +4,10 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from collections import OrderedDict
 from pathlib import Path
-from . import config, protocol
+from . import config, protocol, ratelimit
 from .claude_ipc import ClaudeIPC
 from .serial_conn import SerialConnection
 from .transport import Transport
@@ -535,6 +536,40 @@ class Daemon:
                     protocol.notify_msg("voice_stop_quiet", vibro=False, text="Dictation stopped")
                 )
 
+    async def _ratelimit_poll_loop(self):
+        """Periodically shell out to `claude /usage` and push the 5h/weekly
+        rate-limit percentages to the Flipper's Usage page. Account-wide
+        data, not per-session, so this runs on its own timer rather than
+        being triggered by the per-response Stop hook."""
+        if not shutil.which("claude"):
+            log.info("claude CLI not found on PATH; rate-limit polling disabled")
+            return
+
+        while True:
+            await asyncio.sleep(config.RATELIMIT_POLL_INTERVAL)
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "claude", "/usage", "--allowed-tools", "",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=25.0)
+            except Exception as e:
+                log.warning("Rate-limit poll failed: %s", e)
+                continue
+
+            text = (stdout or stderr or b"").decode(errors="replace")
+            session_pct, week_pct = ratelimit.parse_claude_usage(text)
+            if session_pct is None and week_pct is None:
+                log.debug("Rate-limit poll: no percentages found in claude /usage output")
+                continue
+
+            try:
+                await self.serial.send(protocol.ratelimit_msg(session_pct, week_pct))
+                log.info("Rate-limit update sent: session=%s%% week=%s%%", session_pct, week_pct)
+            except Exception as e:
+                log.warning("Failed to send rate-limit update: %s", e)
+
     async def _send_ctrl_c(self):
         await self._input.send_ctrl_c()
 
@@ -646,6 +681,7 @@ class Daemon:
 
         asyncio.create_task(self.serial.reconnect_loop())
         asyncio.create_task(self._dictation_sync_loop())
+        asyncio.create_task(self._ratelimit_poll_loop())
 
         log.info("=" * 60)
         log.info("Bridge daemon started")

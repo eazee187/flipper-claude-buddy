@@ -64,6 +64,7 @@ static MsgType parse_type(const char* type_str) {
     if(strcmp(type_str, "state") == 0) return MsgTypeState;
     if(strcmp(type_str, "perm") == 0) return MsgTypePerm;
     if(strcmp(type_str, "usage") == 0) return MsgTypeUsage;
+    if(strcmp(type_str, "ratelimit") == 0) return MsgTypeRatelimit;
     return MsgTypeUnknown;
 }
 
@@ -115,6 +116,15 @@ bool protocol_parse(const char* json_line, ProtocolMessage* msg) {
             if(json_get_int(d_start, "cr", &v)) msg->usage_cache_read_tokens = (uint32_t)v;
             if(json_get_int(d_start, "cost", &v)) msg->usage_cost_cents = (uint32_t)v;
             if(json_get_int(d_start, "pct", &v)) msg->usage_context_pct = v;
+        }
+        break;
+    case MsgTypeRatelimit:
+        {
+            int v = 0;
+            msg->ratelimit_session_pct = -1;
+            msg->ratelimit_week_pct = -1;
+            if(json_get_int(d_start, "r5", &v)) msg->ratelimit_session_pct = v;
+            if(json_get_int(d_start, "rw", &v)) msg->ratelimit_week_pct = v;
         }
         break;
     case MsgTypePing:
