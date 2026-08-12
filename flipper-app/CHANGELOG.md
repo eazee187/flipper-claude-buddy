@@ -1,3 +1,9 @@
+## v0.7.5
+
+- On-device Usage page now also shows Claude's 5h-window and weekly rate-limit usage percentages (from `claude /usage`), alongside the existing token/cost stats.
+- New `flipper-restart-bridge` skill: cleanly restarts the host bridge daemon and reconnects (USB or BLE) without a manual `kill`/socket cleanup dance.
+- Fixed a crash in the BLE transport: a transient GATT/DBus error while enabling notifications (e.g. right after connecting) was left unhandled and took down the whole bridge daemon instead of just failing that one connection attempt. The bridge now logs the error and retries on the next reconnect tick, like it already did for connection failures.
+
 ## v0.7.4
 
 - The Up button, when dictation is disabled (the Linux default), sends a configurable quick-action command (e.g. `/compact`) — now configurable directly on the Flipper: hold Right → MENU → Quick Action, type a new command (blank = revert to host default), OK to save. Takes effect immediately, no reconnect needed. Still configurable via `FLIPPER_QUICK_ACTION`/the plugin's Quick Action Command option as before.

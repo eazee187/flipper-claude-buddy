@@ -845,7 +845,7 @@ static int info_menu_step(int from, int delta) {
 
 static const char* about_lines[] = {
     "Claude Buddy",
-    "v0.7.4",
+    "v0.7.5",
     "Claude Code companion",
     "by eazee187",
     "github.com/eazee187",
