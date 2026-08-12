@@ -1,6 +1,6 @@
 ---
 name: flipper-restart-bridge
-description: Restart the flipper-claude-buddy host bridge daemon and reconnect to the Flipper Zero. Use when notifications/keystrokes aren't reaching the Flipper, the bridge log shows "Serial send dropped (not connected)", or BLE gets stuck after a `start_notify`/`BleakDBusError: Not Connected` failure.
+description: Restart the flipper-claude-buddy host bridge daemon and reconnect to the Flipper Zero. Use when notifications/keystrokes aren't reaching the Flipper, the bridge log shows "Serial send dropped (not connected)", BLE gets stuck after a `start_notify`/`BleakDBusError: Not Connected` failure, or BLE connects and then instantly drops (`failed to discover services, device disconnected` — see the unpaired-device section below).
 allowed-tools: Bash
 ---
 
@@ -90,3 +90,45 @@ fi
 - Re-registers the current terminal as the active input target, so
   keystroke forwarding keeps working for the session that triggered the
   restart.
+
+## Unpaired device: connects then instantly disconnects (needs BLE pairing)
+
+Symptom: `bluetoothctl connect <mac>` reports `Connected: yes` but flips back
+to `Connected: no` within ~0.5s, every time, even after rebooting the
+Flipper. Bridge log shows `failed to discover services, device disconnected`.
+`bluetoothctl info <mac>` shows `Paired: no` / `Bonded: no`.
+
+Root cause: the Flipper's built-in Bridge-mode BLE serial profile (used by
+`transport_bt.c`, distinct from the custom NUS profile in `nus_profile.c`
+which explicitly disables bonding) requires **passkey-entry pairing**. On
+Linux this shows up in the kernel log as:
+
+```
+kernel: Bluetooth: hci0: unexpected SMP command 0x0b from <mac>
+```
+
+(SMP opcode `0x0b` = Security Request.) Without an existing bond, the host's
+BlueZ stack can't complete the SMP handshake in time and drops the link
+right after `ServicesResolved` — this is a security handshake failure, not
+an advertising, discovery, or bridge-daemon problem, so restarting the
+bridge daemon alone will loop forever without fixing it.
+
+Fix — pair once with an agent that can prompt for a passkey (this step is
+interactive and needs a human reading the 6-digit code off the Flipper's
+screen; it cannot be scripted headlessly):
+
+```bash
+bluetoothctl
+agent KeyboardOnly
+default-agent
+scan on
+pair <mac>
+# Flipper screen shows a 6-digit passkey — type it at the
+# "Enter passkey (number in 0-999999):" prompt
+trust <mac>
+quit
+```
+
+Verify with `bluetoothctl info <mac>` — expect `Paired: yes`, `Bonded: yes`.
+Once bonded, `trust` keeps BlueZ auto-reconnecting on future sessions, and
+a normal bridge restart (see above) will connect cleanly and stay connected.
