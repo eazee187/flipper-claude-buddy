@@ -100,7 +100,14 @@ class BtTransport(Transport):
         mtu = getattr(self._client, "mtu_size", 23)
         log.info("BT: negotiated MTU=%d  (write chunk=%d)", mtu, max(1, min(mtu - 3, config.BT_WRITE_CHUNK)))
 
-        await self._client.start_notify(self._tx_uuid, self._on_notify)
+        try:
+            await self._client.start_notify(self._tx_uuid, self._on_notify)
+        except Exception as e:
+            log.error("BT: enabling notifications on %s failed: %s", device.name, e)
+            await self._client.disconnect()
+            self._client = None
+            return False
+
         self._closed = False
         self._rx_buf.clear()
         log.info("BT: connected to %s", device.name)
