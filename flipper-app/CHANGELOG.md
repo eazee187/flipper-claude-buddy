@@ -1,3 +1,7 @@
+## v0.7.6
+
+- `flipper-restart-bridge` skill now documents and diagnoses the BLE connect-then-instantly-disconnect failure mode caused by missing passkey pairing on the host (Bridge-mode's built-in serial profile requires it, unlike the custom NUS profile) — includes the `bluetoothctl` pairing steps to fix it.
+
 ## v0.7.5
 
 - On-device Usage page now also shows Claude's 5h-window and weekly rate-limit usage percentages (from `claude /usage`), alongside the existing token/cost stats.
